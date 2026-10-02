@@ -152,16 +152,27 @@ later regenerated -- just repeat step 3 for whichever side changed.
 If you'd rather skip the bootstrap step, generate a keypair yourself
 (`ssh-keygen -t ed25519 -N "" -f nix-dynamic-builders_ed25519`) and point
 `sshKey` at the private half -- then both sides' `publicKey` are known
-upfront and a single deploy is enough:
+upfront and a single deploy is enough. Hand `sshKey` the **decrypted
+secret path** from a secrets manager like
+[sops-nix](https://github.com/Mic92/sops-nix) or
+[agenix](https://github.com/ryantm/agenix) (a plain string, e.g.
+`config.sops.secrets."nix-dynamic-builders-key".path`), not a bare Nix
+path literal (`./nix-dynamic-builders_ed25519`) -- a path literal gets
+copied into the world-readable Nix store, and separately breaks
+`nix-dynamic-builders-show-key --default`'s `.pub`-sibling lookup (see
+`docs/decisions/0003`'s "known limitation"). The public half isn't
+secret, so it's fine to just paste its content directly:
 
 ```nix
-# host A's configuration
+# host A's configuration -- private key decrypted by sops-nix at
+# activation (never touches the Nix store); public key pasted directly
+# since it isn't secret.
 services.nixDynamicBuilders = {
   enable = true;
-  sshKey = ./nix-dynamic-builders_ed25519;
+  sshKey = config.sops.secrets."nix-dynamic-builders-key".path;
   peers.host-b = {
     maxJobs = 8;
-    publicKey = builtins.readFile ./nix-dynamic-builders_ed25519.pub;
+    publicKey = "ssh-ed25519 AAAA...host-b's-real-public-key";
   };
 };
 ```
