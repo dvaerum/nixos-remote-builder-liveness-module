@@ -30,10 +30,10 @@ flowchart TD
         F["also query live features:<br/>nix-remote-builder@&lt;peer&gt; nix-dynamic-builders-query-features"]
         G["write EMPTY fragment<br/>(no builder for this peer)"]
         H["write THIS PEER'S OWN fragment:<br/>'ssh-ng://user@host system sshKey maxJobs speedFactor &lt;live features&gt; ... -'"]
-        I["${runtimeDir}/machines.d/&lt;peer&gt;<br/>(write-temp-then-rename)"]
+        I["runtimeDir/machines.d/&lt;peer&gt;<br/>(write-temp-then-rename)"]
         J["reassemble every peer's current fragment into ONE file"]
-        K["mv -f tmp -&gt; ${runtimeDir}/machines<br/>(atomic rename -- nix-daemon NEVER sees a half-written file)"]
-        L["nix-daemon, on EVERY build<br/>readFile(&quot;@${runtimeDir}/machines&quot;)<br/>fresh read, ZERO caching (confirmed: src/libstore/machines.cc)"]
+        K["mv -f tmp -&gt; runtimeDir/machines<br/>(atomic rename -- nix-daemon NEVER sees a half-written file)"]
+        L["nix-daemon, on EVERY build<br/>readFile(&quot;@runtimeDir/machines&quot;)<br/>fresh read, ZERO caching (confirmed: src/libstore/machines.cc)"]
         M["a peer's line present<br/>--&gt; dispatch build over SSH to that peer"]
         N["no lines at all<br/>--&gt; build locally"]
 
