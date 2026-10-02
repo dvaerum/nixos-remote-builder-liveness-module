@@ -57,7 +57,7 @@ flowchart TD
     P["services.nixDynamicBuilderUser.peers.#60;name#62;.publicKey<br/>installed in nix-remote-builder's authorized_keys,<br/>one line per configured peer"]
     Q["command=#34;nix-dynamic-builders-dispatch #60;nice-level#62; nix-dynamic-builders-query-features#34;,restrict #60;pubkey#62;<br/>-- can NEVER open a shell or run anything else even if the<br/>private half leaks: the forced command always runs regardless<br/>of what the client asks for"]
     R{"$SSH_ORIGINAL_COMMAND ==<br/>nix-dynamic-builders-query-features ?"}
-    S["nix config show system-features<br/>(the live-feature query)"]
+    S["nix config show system<br/>nix config show system-features<br/>(the live system + feature query, one SSH round trip)"]
     T["nice -#60;level#62; nix-store --serve --write<br/>(anything else, including nix-daemon's own real build dispatch)"]
     U["nix.settings.trusted-users = [ #34;nix-remote-builder#34; ]<br/>-- lets --serve import build inputs without a per-path signature check"]
 
@@ -79,7 +79,9 @@ is live while `mandatoryFeatures` stays static, and
 why the test suite runs on `systemd-nspawn` rather than QEMU, and
 [`docs/decisions/0005`](docs/decisions/0005-independent-builder-user-service.md)
 for why dispatching to peers and accepting connections from peers are
-two independently-enableable services.
+two independently-enableable services, and
+[`docs/decisions/0006`](docs/decisions/0006-live-system.md) for why
+`system` is live-fetched the same way, with no static fallback at all.
 
 ## Setup
 
@@ -213,7 +215,7 @@ see `docs/decisions/0004`:
   real SSH, the assembled machines file picks up each live peer
   independently (proving fragment-per-peer writes don't clobber each
   other), falls back to empty for just the one direction that drops,
-  live-fetches a peer's real `system-features`, exercises
+  live-fetches a peer's real `system` and `system-features`, exercises
   self-generated keys, `show-key`, and the public-key-readability toggle,
   and dispatches a real build to a fourth peer that only enables
   `services.nixDynamicBuilderUser` -- proving the two services are
