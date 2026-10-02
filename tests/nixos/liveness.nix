@@ -53,8 +53,7 @@ let
     services.openssh.enable = true;
     services.nixDynamicBuilders = {
       enable = true;
-      peer = {
-        inherit hostname;
+      peers.${hostname} = {
         maxJobs = 2;
         publicKey = testSshPublicKey;
       };
@@ -78,7 +77,7 @@ in
     bob.wait_for_unit("sshd.socket")
 
     # Force a tick now instead of waiting out the real 60s timer.
-    alice.succeed("systemctl start nix-dynamic-builders-refresh.service")
+    alice.succeed("systemctl start nix-dynamic-builders-refresh-bob.service")
     alice.wait_until_succeeds("grep -q bob /var/lib/nix-dynamic-builders/machines")
 
     # Peer goes down -> next tick drops it back to an empty file
@@ -86,7 +85,7 @@ in
     # socket, not sshd.service -- the latter is a transient per-connection
     # unit under socket activation and usually isn't even loaded.
     bob.succeed("systemctl stop sshd.socket")
-    alice.succeed("systemctl start nix-dynamic-builders-refresh.service")
+    alice.succeed("systemctl start nix-dynamic-builders-refresh-bob.service")
     alice.wait_until_succeeds("test ! -s /var/lib/nix-dynamic-builders/machines")
   '';
 }

@@ -7,16 +7,8 @@
 
 let
   cfg = config.services.nixDynamicBuilders;
-  peerSupportedFeatures =
-    if cfg.peer.supportedFeatures == [ ] then
-      "-"
-    else
-      lib.concatStringsSep "," cfg.peer.supportedFeatures;
-  peerMandatoryFeatures =
-    if cfg.peer.mandatoryFeatures == [ ] then
-      "-"
-    else
-      lib.concatStringsSep "," cfg.peer.mandatoryFeatures;
+
+  featureList = features: if features == [ ] then "-" else lib.concatStringsSep "," features;
 
   refreshScript = pkgs.writeShellApplication {
     name = "nix-dynamic-builders-refresh";
@@ -58,10 +50,13 @@ in
       hashedPassword = "*";
       # restrict,command= means this key can ONLY ever invoke nix-store
       # --serve -- never a shell, never arbitrary commands, even if the
-      # private key half of this pair leaked.
-      openssh.authorizedKeys.keys = [
-        ''command="nice -19 nix-store --serve --write",restrict ${cfg.peer.publicKey}''
-      ];
+      # private key half of this pair leaked. One line per configured
+      # peer -- all mapping to this same shared account, since the forced
+      # command already fully constrains each key regardless of which
+      # account it lands on.
+      openssh.authorizedKeys.keys = lib.mapAttrsToList (
+        _: peerCfg: ''command="nice -19 nix-store --serve --write",restrict ${peerCfg.publicKey}''
+      ) cfg.peers;
     };
 
     # nix-store --serve needs to import build-input paths without a
@@ -78,34 +73,40 @@ in
       "d /var/lib/nix-dynamic-builders 0750 root root -"
     ];
 
-    systemd.services.nix-dynamic-builders-refresh = {
-      description = "Probe ${cfg.peer.hostname} liveness and rewrite the dynamic nix builders file";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe refreshScript;
-        Environment = [
-          "PEER_HOSTNAME=${cfg.peer.hostname}"
-          "PEER_USER=nix-remote-builder"
-          "PEER_SYSTEM=${cfg.peer.system}"
-          "PEER_MAX_JOBS=${toString cfg.peer.maxJobs}"
-          "PEER_SPEED_FACTOR=${toString cfg.peer.speedFactor}"
-          "PEER_SUPPORTED_FEATURES=${peerSupportedFeatures}"
-          "PEER_MANDATORY_FEATURES=${peerMandatoryFeatures}"
-          "SSH_KEY_PATH=${config.sops.secrets."nix-dynamic-builders/ssh-key".path}"
-          "KNOWN_HOSTS_FILE=/var/lib/nix-dynamic-builders/known_hosts"
-          "MACHINES_FILE=/var/lib/nix-dynamic-builders/machines"
-        ];
-      };
-    };
+    systemd.services = lib.mapAttrs' (
+      peerName: peerCfg:
+      lib.nameValuePair "nix-dynamic-builders-refresh-${peerName}" {
+        description = "Probe ${peerCfg.hostname} liveness and rewrite the dynamic nix builders file";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.getExe refreshScript;
+          Environment = [
+            "PEER_HOSTNAME=${peerCfg.hostname}"
+            "PEER_USER=nix-remote-builder"
+            "PEER_SYSTEM=${peerCfg.system}"
+            "PEER_MAX_JOBS=${toString peerCfg.maxJobs}"
+            "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
+            "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
+            "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
+            "SSH_KEY_PATH=${config.sops.secrets."nix-dynamic-builders/ssh-key".path}"
+            "KNOWN_HOSTS_FILE=/var/lib/nix-dynamic-builders/known_hosts"
+            "MACHINES_FILE=/var/lib/nix-dynamic-builders/machines"
+          ];
+        };
+      }
+    ) cfg.peers;
 
-    systemd.timers.nix-dynamic-builders-refresh = {
-      description = "Periodic ${cfg.peer.hostname} liveness probe for dynamic nix builders";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "30s";
-        OnUnitActiveSec = "60s";
-      };
-    };
+    systemd.timers = lib.mapAttrs' (
+      peerName: peerCfg:
+      lib.nameValuePair "nix-dynamic-builders-refresh-${peerName}" {
+        description = "Periodic ${peerCfg.hostname} liveness probe for dynamic nix builders";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "30s";
+          OnUnitActiveSec = "60s";
+        };
+      }
+    ) cfg.peers;
 
     # nixpkgs' own nix-remote-build.nix forces `nix.settings.builders =
     # null` whenever distributedBuilds is false (its default) -- a real

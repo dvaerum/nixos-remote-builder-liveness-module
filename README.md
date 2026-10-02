@@ -113,8 +113,7 @@ one keypair, use its public half on both hosts.
    # host A's configuration
    services.nixDynamicBuilders = {
      enable = true;
-     peer = {
-       hostname = "host-b";
+     peers.host-b = {
        maxJobs = 8; # size below host B's real thread count if it's a
                     # dual-use machine someone also works on directly
        publicKey = builtins.readFile ./nix-dynamic-builders_ed25519.pub;
@@ -126,13 +125,17 @@ one keypair, use its public half on both hosts.
    # host B's configuration (mirror)
    services.nixDynamicBuilders = {
      enable = true;
-     peer = {
-       hostname = "host-a";
+     peers.host-a = {
        maxJobs = 8;
        publicKey = builtins.readFile ./nix-dynamic-builders_ed25519.pub;
      };
    };
    ```
+
+   A host can list more than one peer under `peers`, each keyed by its own
+   name (which also becomes its hostname by default -- set `hostname`
+   explicitly only if the peer's reachable name differs from the name you
+   give it here).
 
 4. Deploy both. Each host starts probing the other every 60s; while
    either peer is offline, that direction just quietly builds locally.
@@ -141,14 +144,14 @@ one keypair, use its public half on both hosts.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `services.nixDynamicBuilders.enable` | bool | `false` | Enable this host's probing timer + receiving-side user |
-| `services.nixDynamicBuilders.peer.hostname` | str | *(required)* | The peer's hostname, probed and dispatched to |
-| `services.nixDynamicBuilders.peer.system` | str | `"x86_64-linux"` | The peer's Nix `system` string |
-| `services.nixDynamicBuilders.peer.maxJobs` | int | *(required)* | The peer's own `maxJobs` for this builder entry |
-| `services.nixDynamicBuilders.peer.speedFactor` | int | `1` | |
-| `services.nixDynamicBuilders.peer.supportedFeatures` | list of str | `["kvm" "big-parallel"]` | |
-| `services.nixDynamicBuilders.peer.mandatoryFeatures` | list of str | `[ ]` | |
-| `services.nixDynamicBuilders.peer.publicKey` | str | *(required)* | The peer's public key, authorized to connect here as `nix-remote-builder` |
+| `services.nixDynamicBuilders.enable` | bool | `false` | Enable this host's probing timers + receiving-side user |
+| `services.nixDynamicBuilders.peers.<name>.hostname` | str | *(attribute name)* | The peer's hostname, probed and dispatched to |
+| `services.nixDynamicBuilders.peers.<name>.system` | str | `"x86_64-linux"` | The peer's Nix `system` string |
+| `services.nixDynamicBuilders.peers.<name>.maxJobs` | int | *(required)* | The peer's own `maxJobs` for this builder entry |
+| `services.nixDynamicBuilders.peers.<name>.speedFactor` | int | `1` | |
+| `services.nixDynamicBuilders.peers.<name>.supportedFeatures` | list of str | `["kvm" "big-parallel"]` | |
+| `services.nixDynamicBuilders.peers.<name>.mandatoryFeatures` | list of str | `[ ]` | |
+| `services.nixDynamicBuilders.peers.<name>.publicKey` | str | *(required)* | The peer's public key, authorized to connect here as `nix-remote-builder` |
 
 ## Trust model
 
