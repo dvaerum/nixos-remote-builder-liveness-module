@@ -64,6 +64,18 @@ in
     # itself reads are set -- the rest of refresh.sh fails harmlessly
     # right after (missing env vars under `set -u`), which is fine
     # since only the key-generation side effect is under test here.
+    # This IS coupled to key generation staying the first thing
+    # refresh.sh does -- if a future change adds logic before it, this
+    # test's "fails harmlessly after" assumption needs re-checking, not
+    # just its own pass/fail.
+    #
+    # Nothing here confirms the two backgrounded processes actually
+    # overlapped -- without that, a serialized scheduler could pass all
+    # 20 attempts without ever exercising concurrent commit at all, a
+    # false sense of coverage for exactly the bug this test exists to
+    # catch. Start/end nanosecond markers bracket each invocation so the
+    # test can assert genuine overlap was observed at least once across
+    # the 20 attempts, not just "no mismatch happened to occur".
     refresh_bin = multiPeer.succeed(
         "systemctl cat nix-dynamic-builders-refresh-workstation.service | grep '^ExecStart='"
     ).strip().split("=", 1)[1]
@@ -71,16 +83,31 @@ in
     multiPeer.succeed(f"""
         set -e
         key_dir=/var/lib/nix-dynamic-builders/ssh-keys/_default
+        overlap_seen=0
         for i in $(seq 1 20); do
           rm -rf "$key_dir"
-          ( SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true ) &
-          ( SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true ) &
+          rm -f /tmp/race_start_a /tmp/race_end_a /tmp/race_start_b /tmp/race_end_b
+          ( date +%s%N > /tmp/race_start_a
+            SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true
+            date +%s%N > /tmp/race_end_a ) &
+          ( date +%s%N > /tmp/race_start_b
+            SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true
+            date +%s%N > /tmp/race_end_b ) &
           wait
+          sa=$(cat /tmp/race_start_a); ea=$(cat /tmp/race_end_a)
+          sb=$(cat /tmp/race_start_b); eb=$(cat /tmp/race_end_b)
+          if [ "$sa" -le "$eb" ] && [ "$sb" -le "$ea" ]; then
+            overlap_seen=1
+          fi
           if ! diff <(ssh-keygen -y -f "$key_dir/ssh_key") "$key_dir/ssh_key.pub" > /dev/null; then
             echo "mismatched keypair committed on attempt $i" >&2
             exit 1
           fi
         done
+        if [ "$overlap_seen" -ne 1 ]; then
+          echo "race test never observed genuine process overlap across 20 attempts -- not a meaningful regression test" >&2
+          exit 1
+        fi
     """)
 
     # --default against a self-generated shared key: both halves exist
