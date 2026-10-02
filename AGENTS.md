@@ -8,10 +8,12 @@ A NixOS module that gives `nix.settings.builders` a live, self-updating
 peer: a systemd timer probes a peer machine's SSH reachability every
 60s and atomically rewrites a plain runtime file that `nix-daemon`
 re-reads fresh on every build dispatch (confirmed against
-`src/libstore/machines.cc` -- zero caching). See `docs/decisions/` for
-the design reasoning behind each real choice (live `@file` vs static
-`nix.buildMachines`, TOFU host-key checking, the shared mutual
-keypair) -- don't re-derive decisions already recorded there.
+`src/libstore/machines.cc` -- zero caching). A host can have any number
+of peers, each independently probed. See `docs/decisions/` for the
+design reasoning behind each real choice (live `@file` vs static
+`nix.buildMachines`, TOFU host-key checking, per-host identity keys and
+why `supportedFeatures` is live-fetched, the `systemd-nspawn` test
+backend) -- don't re-derive decisions already recorded there.
 
 There is no software package here, only a NixOS module + a shell
 script sourced straight from this tree. No build artifact, no
@@ -23,12 +25,19 @@ language toolchain, nothing to version-pin beyond the flake itself.
 flake.nix          nixosModules.default + checks.<system>.liveness
 nixosModule/        options.nix (services.nixDynamicBuilders.*), config.nix (the actual
                     systemd units/users/nix.settings wiring), default.nix (glue)
-refresh.sh          the liveness-probe script itself, wrapped via
-                    pkgs.writeShellApplication in config.nix -- edit this file
-                    directly, not an inline string in config.nix
-tests/nixos/        liveness.nix -- a real two-VM nixosTest: both peers probe
-                    each other over real SSH, assert the machines file tracks
-                    actual reachability both ways (up AND the peer going down)
+refresh.sh          the liveness-probe script, one instance per configured
+                    peer, wrapped via pkgs.writeShellApplication in config.nix
+                    -- edit this file directly, not an inline string
+dispatch.sh         the receiving side's forced authorized_keys command --
+                    branches between nix-store --serve and a live
+                    supportedFeatures query, see docs/decisions/0003
+show-key.sh         nix-dynamic-builders-show-key's script body -- prints a
+                    public key for the Setup bootstrap flow in README.md
+tests/nixos/        liveness.nix -- a real multi-peer nixosTest (systemd-nspawn,
+                    see docs/decisions/0004): several peers probe each other
+                    over real SSH, assert the assembled machines file tracks
+                    actual reachability per peer independently, live feature
+                    queries, self-generated keys, and show-key
 tests/fixtures/      test-ed25519 -- a throwaway keypair generated solely for
                     the test above; not a real secret, safe to read/regenerate
 docs/decisions/      one ADR per real design decision, with sources cited
@@ -38,12 +47,16 @@ docs/decisions/      one ADR per real design decision, with sources cited
 
 - Gate before committing: `nix flake check -L`. This is the whole test
   suite -- there's no separate fast/slow tier here, just the one real
-  end-to-end VM test. It's slow (builds two NixOS VMs from scratch on
-  a cold cache) -- that's expected, not a sign something's wrong.
+  end-to-end test, now on `systemd-nspawn` containers rather than QEMU
+  (see `docs/decisions/0004`) -- noticeably faster per iteration than a
+  from-scratch VM boot, but still a real multi-host run, not a stand-in.
 - `nix fmt` (nixfmt-rfc-style) before committing any `.nix` change.
-- Changing `refresh.sh`: re-run `nix flake check` -- the test actually
-  exercises this script inside a real VM, not just the Nix wiring
-  around it.
+- Changing `refresh.sh` or `dispatch.sh`: re-run `nix flake check -L` --
+  the test actually exercises these scripts inside real containers, not
+  just the Nix wiring around them.
+- New non-`.nix` files referenced via `builtins.readFile` (like
+  `dispatch.sh`/`show-key.sh`) must be `git add`-ed before Nix can see
+  them at all -- flakes only evaluate git-tracked files.
 - Changing an option in `options.nix`: update `README.md`'s options
   table by hand (no `docs/options.md` generator here, unlike the
   sibling `nixos-postgres-maintenance-module` -- this module's option

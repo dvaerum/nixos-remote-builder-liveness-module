@@ -16,57 +16,77 @@ instead, silently and automatically.
 
 ## How it works
 
+Every configured peer gets its own independent timer/service pair, so a
+host with several peers probes each on its own schedule:
+
 ```
-                    nix-dynamic-builders-refresh.timer
-                    (OnBootSec=30s, OnUnitActiveSec=60s)
-                                  |
-                                  v
-                    nix-dynamic-builders-refresh.service
-                       (oneshot -- stateless each tick)
-                                  |
-                                  v
-            +---------------------------------------------+
-            |  ssh -i ssh-key -o ConnectTimeout=2 ...       |
-            |  nix-remote-builder@<peer> true                |
-            |  (up to 3 attempts, 1.5s apart)                |
-            +---------------------------------------------+
-                      |                          |
-              reachable                   unreachable (3/3 failed)
-                      |                          |
-                      v                          v
-      write tmp file with ONE line:      write EMPTY tmp file
-      "ssh-ng://user@host system          (no builders listed)
-       sshKey maxJobs speedFactor
-       features ... -"
-                      |                          |
-                      +------------+-------------+
-                                   |
-                                   v
-                    mv -f tmp  ->  /var/lib/nix-dynamic-builders/machines
+         nix-dynamic-builders-refresh-<peer>.timer
+         (OnBootSec/OnUnitActiveSec -- global, same for every peer)
+                          |
+                          v
+         nix-dynamic-builders-refresh-<peer>.service
+            (oneshot -- stateless each tick, one per peer)
+                          |
+                          v
+  +----------------------------------------------------------+
+  |  ssh -i <this peer's key> -o ConnectTimeout=... ...        |
+  |  nix-remote-builder@<peer> true                             |
+  |  (up to N attempts, configurable delay apart)                |
+  +----------------------------------------------------------+
+            |                                    |
+     reachable (ssh exit != 255)        unreachable (N/N failed)
+            |                                    |
+            v                                    v
+  also query live features:              write EMPTY fragment
+  nix-remote-builder@<peer>              (no builder for this peer)
+  nix-dynamic-builders-query-features
+            |
+            v
+  write THIS PEER'S OWN fragment:
+  "ssh-ng://user@host system
+   sshKey maxJobs speedFactor
+   <live features> ... -"
+            |
+            +------------------+
+                                v
+         ${runtimeDir}/machines.d/<peer>   (write-temp-then-rename)
+                                |
+                                v
+      reassemble every peer's current fragment into ONE file:
+                                |
+                                v
+                    mv -f tmp  ->  ${runtimeDir}/machines
                     (atomic rename -- nix-daemon NEVER sees a half-written file)
                                    |
                                    v
    +-------------------------------------------------------------------+
    |                      nix-daemon, on EVERY build                   |
    |                                                                   |
-   |   readFile("@/var/lib/nix-dynamic-builders/machines")             |
+   |   readFile("@${runtimeDir}/machines")                              |
    |   -- fresh read, ZERO caching (confirmed: src/libstore/machines.cc)|
    |                                                                   |
-   |        peer line present  --------->  dispatch build over SSH     |
-   |                                       to peer's "nix-store --serve"|
+   |      a peer's line present  ------>  dispatch build over SSH       |
+   |                                      to that peer                   |
    |                                                                   |
-   |        file empty         --------->  build locally               |
+   |      no lines at all        ------>  build locally                  |
    +-------------------------------------------------------------------+
 
    -------------------------- receiving side (on the PEER) --------------------------
 
-   services.nixDynamicBuilders.peer.publicKey
-   installed in nix-remote-builder's authorized_keys with a forced prefix:
+   services.nixDynamicBuilders.peers.<name>.publicKey
+   installed in nix-remote-builder's authorized_keys with a forced prefix,
+   one line per configured peer:
 
-       command="nice -19 nix-store --serve --write",restrict  <pubkey>
+       command="nix-dynamic-builders-dispatch <nice-level>",restrict  <pubkey>
 
-   -> this key can NEVER open a shell or run anything else,
-      even if the private half leaks -- only nix-store --serve.
+   -> this key can NEVER open a shell or run anything else, even if the
+      private half leaks -- the forced command always runs regardless
+      of what the client asks for, and only ever does one of two things:
+
+       $SSH_ORIGINAL_COMMAND == nix-dynamic-builders-query-features
+         -> nix config show system-features      (the live-feature query)
+       anything else (including nix-daemon's own real build dispatch)
+         -> nice -<level> nix-store --serve --write
 
    nix.settings.trusted-users = [ "nix-remote-builder" ]
    -> lets --serve import build inputs without a per-path signature check
@@ -74,9 +94,14 @@ instead, silently and automatically.
 
 See [`docs/decisions/0001`](docs/decisions/0001-live-file-over-static-buildmachines.md)
 for why a live `@file` was chosen over the built-in static
-`nix.buildMachines`, and
+`nix.buildMachines`,
 [`docs/decisions/0002`](docs/decisions/0002-tofu-host-key-checking.md)
-for the host-key-checking and trust-model rationale.
+for the host-key-checking and trust-model rationale,
+[`docs/decisions/0003`](docs/decisions/0003-multi-peer-and-key-model.md)
+for the multi-peer/per-host-identity-key design and why `supportedFeatures`
+is live while `mandatoryFeatures` stays static, and
+[`docs/decisions/0004`](docs/decisions/0004-nspawn-test-backend.md) for
+why the test suite runs on `systemd-nspawn` rather than QEMU.
 
 ## Setup
 
@@ -189,10 +214,13 @@ third-party peers.
 ## Testing
 
 ```bash
-nix flake check
+nix flake check -L
 ```
 
-Runs a real two-VM test (`tests/nixos/liveness.nix`): both peers come
-up, SSH to each other, the machines file picks up the live peer, and
--- the fallback path this module exists for -- going back to empty the
-moment the peer drops.
+Runs a real multi-host test (`tests/nixos/liveness.nix`, on
+`systemd-nspawn` containers -- see `docs/decisions/0004`): three real
+peers probe each other over real SSH, the assembled machines file picks
+up each live peer independently (proving fragment-per-peer writes don't
+clobber each other), falls back to empty for just the one direction that
+drops, live-fetches a peer's real `system-features`, and exercises
+self-generated keys, `show-key`, and the public-key-readability toggle.
