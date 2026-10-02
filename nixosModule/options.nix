@@ -138,6 +138,7 @@ in
               system = lib.mkOption {
                 type = lib.types.str;
                 default = "x86_64-linux";
+                description = "The peer's Nix `system` string, as it appears in the machines-file line.";
               };
               maxJobs = lib.mkOption {
                 type = lib.types.int;
@@ -151,6 +152,7 @@ in
               speedFactor = lib.mkOption {
                 type = lib.types.int;
                 default = 1;
+                description = "The peer's relative speed factor, as it appears in the machines-file line -- see `nix.buildMachines`'s `speedFactor`.";
               };
               supportedFeatures = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
@@ -158,10 +160,24 @@ in
                   "kvm"
                   "big-parallel"
                 ];
+                description = ''
+                  Fallback only -- each tick replaces this with the peer's
+                  real, live `nix config show system-features`, queried over
+                  the same restricted SSH channel (see
+                  `docs/decisions/0003`); this value is only used if that
+                  live query fails.
+                '';
               };
               mandatoryFeatures = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
+                description = ''
+                  Features a build must explicitly request before this peer
+                  is even considered for it -- this host's own dispatching
+                  policy toward the peer, not a fact about the peer, so
+                  unlike `supportedFeatures` it's never fetched live. See
+                  `docs/decisions/0003`.
+                '';
               };
               publicKey = lib.mkOption {
                 type = lib.types.str;
@@ -196,11 +212,19 @@ in
                 type = lib.types.bool;
                 default = cfg.publicKeyWorldReadable;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.publicKeyWorldReadable";
+                description = ''
+                  Per-peer override of the global
+                  `publicKeyWorldReadable`. Only meaningful when this peer
+                  has its own distinct key (`sshKey` isn't `false`) -- a
+                  peer reusing the shared default key can't have its own
+                  say over that one shared file's permissions.
+                '';
               };
               connectTimeout = lib.mkOption {
                 type = lib.types.int;
                 default = cfg.connectTimeout;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.connectTimeout";
+                description = "Per-peer override of the global `connectTimeout`.";
               };
               strictHostKeyChecking = lib.mkOption {
                 type = lib.types.enum [
@@ -210,21 +234,25 @@ in
                 ];
                 default = cfg.strictHostKeyChecking;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.strictHostKeyChecking";
+                description = "Per-peer override of the global `strictHostKeyChecking`.";
               };
               probeRetries = lib.mkOption {
                 type = lib.types.int;
                 default = cfg.probeRetries;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.probeRetries";
+                description = "Per-peer override of the global `probeRetries`.";
               };
               probeRetryDelay = lib.mkOption {
                 type = lib.types.str;
                 default = cfg.probeRetryDelay;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.probeRetryDelay";
+                description = "Per-peer override of the global `probeRetryDelay`.";
               };
               niceLevel = lib.mkOption {
                 type = lib.types.int;
                 default = cfg.niceLevel;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.niceLevel";
+                description = "Per-peer override of the global `niceLevel`.";
               };
             };
           }

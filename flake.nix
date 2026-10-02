@@ -23,6 +23,7 @@
       {
         checks = {
           liveness = pkgs.testers.nixosTest (import ./tests/nixos/liveness.nix);
+          examples = pkgs.testers.nixosTest (import ./tests/nixos/examples.nix { nixosModule = self; });
         };
 
         formatter = pkgs.nixfmt-rfc-style;

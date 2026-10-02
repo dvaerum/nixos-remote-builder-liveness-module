@@ -22,7 +22,7 @@ language toolchain, nothing to version-pin beyond the flake itself.
 ## Project structure
 
 ```
-flake.nix          nixosModules.default + checks.<system>.liveness
+flake.nix          nixosModules.default + checks.<system>.{liveness,examples}
 nixosModule/        options.nix (services.nixDynamicBuilders.*), config.nix (the actual
                     systemd units/users/nix.settings wiring), default.nix (glue)
 refresh.sh          the liveness-probe script, one instance per configured
@@ -33,14 +33,22 @@ dispatch.sh         the receiving side's forced authorized_keys command --
                     supportedFeatures query, see docs/decisions/0003
 show-key.sh         nix-dynamic-builders-show-key's script body -- prints a
                     public key for the Setup bootstrap flow in README.md
+examples/           working, tested services.nixDynamicBuilders.* scenarios --
+                    one self-contained module fragment per file, indexed by
+                    examples/default.nix, each imported for real by
+                    tests/nixos/examples.nix
 tests/nixos/        liveness.nix -- a real multi-peer nixosTest (systemd-nspawn,
                     see docs/decisions/0004): several peers probe each other
                     over real SSH, assert the assembled machines file tracks
                     actual reachability per peer independently, live feature
-                    queries, self-generated keys, and show-key
+                    queries, self-generated keys, and show-key.
+                    examples.nix -- every examples/ file actually evaluates
+                    and wires up the units it claims to.
 tests/fixtures/      test-ed25519 -- a throwaway keypair generated solely for
-                    the test above; not a real secret, safe to read/regenerate
+                    the tests above; not a real secret, safe to read/regenerate
 docs/decisions/      one ADR per real design decision, with sources cited
+docs/options.md      generated option reference -- see "Documentation" below
+generate-doc.nix    regenerates docs/options.md -- see "Documentation" below
 ```
 
 ## Workflow
@@ -54,14 +62,21 @@ docs/decisions/      one ADR per real design decision, with sources cited
 - Changing `refresh.sh` or `dispatch.sh`: re-run `nix flake check -L` --
   the test actually exercises these scripts inside real containers, not
   just the Nix wiring around them.
-- New non-`.nix` files referenced via `builtins.readFile` (like
-  `dispatch.sh`/`show-key.sh`) must be `git add`-ed before Nix can see
-  them at all -- flakes only evaluate git-tracked files.
-- Changing an option in `options.nix`: update `README.md`'s options
-  table by hand (no `docs/options.md` generator here, unlike the
-  sibling `nixos-postgres-maintenance-module` -- this module's option
-  surface is small enough that a generator would be more machinery
-  than the thing it documents).
+- Any new file referenced from Nix (`.nix` or not -- `dispatch.sh`,
+  `show-key.sh`, a new `examples/*.nix`) must be `git add`-ed before Nix
+  can see it at all -- flakes only evaluate git-tracked files.
+- Changing an option in `options.nix`: every option needs a
+  `description` -- `generate-doc.nix` builds with
+  `documentation.nixos.options.warningsAreErrors` behavior (a missing
+  description is a hard build failure, not a warning), so this is
+  caught by the same gate as everything else, not a separate lint.
+  Regenerate the doc afterwards (see "Documentation" below).
+- Adding or changing an option that a real deployment would plausibly
+  use: add or update an `examples/*.nix` scenario and its assertions in
+  `tests/nixos/examples.nix` -- same reasoning as
+  `nixos-postgres-maintenance-module`'s own `examples/`: a
+  renamed/removed option should fail CI through a real example, not
+  just silently go stale in prose.
 
 ## Versioning
 
@@ -82,4 +97,10 @@ anywhere in this repo.
   considered, WHY with sources, not a changelog.
 - Don't duplicate information across docs -- link to the canonical
   home instead of copying. `README.md` is the user-facing entry point;
-  `docs/decisions/` is where the WHY actually lives.
+  `docs/decisions/` is where the WHY actually lives; `docs/options.md`
+  is generated, not hand-maintained -- edit `nixosModule/options.nix`
+  and regenerate instead of editing the doc directly:
+
+  ```
+  nix-build generate-doc.nix && cp result docs/options.md
+  ```

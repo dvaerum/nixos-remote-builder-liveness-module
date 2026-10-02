@@ -173,31 +173,13 @@ give it here).
 
 ## Options reference
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `services.nixDynamicBuilders.enable` | bool | `false` | Enable this host's probing timers + receiving-side user |
-| `services.nixDynamicBuilders.baseDir` | path | `/var/lib/nix-dynamic-builders` | Persistent state: SSH keys, `known_hosts` |
-| `services.nixDynamicBuilders.knownHostsFile` | path | `"${baseDir}/known_hosts"` | TOFU known_hosts file -- see docs/decisions/0002 |
-| `services.nixDynamicBuilders.runtimeDir` | path | `/run/nix-dynamic-builders` | Ephemeral (tmpfs) runtime state: the machines file and per-peer fragments |
-| `services.nixDynamicBuilders.sshKey` | `true`\|`false`\|path\|str | *(required)* | Shared default identity key: generate (`true`), disable (`false`), or use this exact pre-existing key |
-| `services.nixDynamicBuilders.publicKeyWorldReadable` | bool | `true` | Whether generated/configured public keys are readable by any local user (so `show-key` just works) or root-only |
-| `services.nixDynamicBuilders.connectTimeout` | int | `2` | Seconds `ssh -o ConnectTimeout` waits per probe attempt |
-| `services.nixDynamicBuilders.strictHostKeyChecking` | `"yes"`\|`"accept-new"`\|`"no"` | `"accept-new"` | TOFU by default -- see docs/decisions/0002 |
-| `services.nixDynamicBuilders.probeRetries` | int | `3` | SSH connect attempts per tick before declaring a peer unreachable |
-| `services.nixDynamicBuilders.probeRetryDelay` | str | `"1.5"` | Seconds between failed attempts (passed straight to `sleep`) |
-| `services.nixDynamicBuilders.niceLevel` | int | `19` | `nice` priority for the receiving side's `nix-store --serve` |
-| `services.nixDynamicBuilders.probeOnBootSec` | str | `"30s"` | Delay before the first probe tick after boot. Global only |
-| `services.nixDynamicBuilders.probeIntervalSec` | str | `"60s"` | How often each peer is re-probed thereafter. Global only |
-| `services.nixDynamicBuilders.peers.<name>.hostname` | str | *(attribute name)* | The peer's hostname, probed and dispatched to |
-| `services.nixDynamicBuilders.peers.<name>.system` | str | `"x86_64-linux"` | The peer's Nix `system` string |
-| `services.nixDynamicBuilders.peers.<name>.maxJobs` | int | *(required)* | The peer's own `maxJobs` for this builder entry |
-| `services.nixDynamicBuilders.peers.<name>.speedFactor` | int | `1` | |
-| `services.nixDynamicBuilders.peers.<name>.supportedFeatures` | list of str | `["kvm" "big-parallel"]` | Fallback only -- each tick replaces this with the peer's real, live `nix config show system-features`, queried over the same restricted SSH channel; only used if that query fails |
-| `services.nixDynamicBuilders.peers.<name>.mandatoryFeatures` | list of str | `[ ]` | |
-| `services.nixDynamicBuilders.peers.<name>.publicKey` | str | *(required)* | The peer's public key, authorized to connect here as `nix-remote-builder` |
-| `services.nixDynamicBuilders.peers.<name>.sshKey` | `false`\|`true`\|path\|str | `false` | Override the shared default: `false` inherits it (erroring if it's disabled), `true` generates a key distinct to this peer, a path/string uses that exact key |
-| `services.nixDynamicBuilders.peers.<name>.publicKeyWorldReadable` | bool | *(inherits `publicKeyWorldReadable`)* | Only meaningful when this peer has its own distinct key (`sshKey` isn't `false`) |
-| `services.nixDynamicBuilders.peers.<name>.{connectTimeout,strictHostKeyChecking,probeRetries,probeRetryDelay,niceLevel}` | *(same as above)* | *(inherits the global value)* | Per-peer override of the matching global option |
+See [`docs/options.md`](docs/options.md) (generated via `generate-doc.nix`)
+for the full option reference, or `nixosModule/options.nix` directly.
+See [`examples/`](examples/) for a working, tested set of scenarios
+(a single peer, two independent peers, a pre-existing keypair instead
+of self-generation, and tuning the probe itself) -- each one is
+exercised by `tests/nixos/examples.nix`, so a renamed/removed option
+breaks CI, not just the docs.
 
 `nix-dynamic-builders-show-key <peer-name>|--default|--fzf` prints a
 public key (not secret) for pasting into the other host's `publicKey` --
@@ -217,10 +199,25 @@ third-party peers.
 nix flake check -L
 ```
 
-Runs a real multi-host test (`tests/nixos/liveness.nix`, on
-`systemd-nspawn` containers -- see `docs/decisions/0004`): three real
-peers probe each other over real SSH, the assembled machines file picks
-up each live peer independently (proving fragment-per-peer writes don't
-clobber each other), falls back to empty for just the one direction that
-drops, live-fetches a peer's real `system-features`, and exercises
-self-generated keys, `show-key`, and the public-key-readability toggle.
+Runs two real multi-host tests, both on `systemd-nspawn` containers --
+see `docs/decisions/0004`:
+
+- `tests/nixos/liveness.nix`: three real peers probe each other over
+  real SSH, the assembled machines file picks up each live peer
+  independently (proving fragment-per-peer writes don't clobber each
+  other), falls back to empty for just the one direction that drops,
+  live-fetches a peer's real `system-features`, and exercises
+  self-generated keys, `show-key`, and the public-key-readability toggle.
+- `tests/nixos/examples.nix`: every file under `examples/` actually
+  evaluates and wires up the units it claims to.
+
+## Development
+
+```
+nix flake check -L                                        # the whole test suite
+nix fmt                                                     # format all .nix files
+nix-build generate-doc.nix && cp result docs/options.md     # regenerate the option reference
+```
+
+See `AGENTS.md` for the full contributor/agent workflow, including the
+versioning policy.
