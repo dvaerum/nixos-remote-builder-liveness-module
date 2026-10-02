@@ -52,6 +52,37 @@ in
     multiPeer.wait_for_unit("nix-dynamic-builders-refresh-workstation.timer")
     multiPeer.wait_for_unit("nix-dynamic-builders-refresh-laptop.timer")
 
+    # Both peers share the global default key (sshKey = true, neither
+    # overrides it) and have no ordering dependency on each other -- a
+    # real first-generation race is possible. Rather than rely on
+    # systemd's own scheduling of the two real timers (unreliable to
+    # provoke on demand), invoke the exact same installed script twice
+    # directly as real concurrent background processes, racing for the
+    # one shared key file, repeated several times (wiping the key
+    # between attempts) to make a one-shot timing fluke unlikely to
+    # hide a real bug. Only the two env vars the key-generation step
+    # itself reads are set -- the rest of refresh.sh fails harmlessly
+    # right after (missing env vars under `set -u`), which is fine
+    # since only the key-generation side effect is under test here.
+    refresh_bin = multiPeer.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-workstation.service | grep '^ExecStart='"
+    ).strip().split("=", 1)[1]
+
+    multiPeer.succeed(f"""
+        set -e
+        key_dir=/var/lib/nix-dynamic-builders/ssh-keys/_default
+        for i in $(seq 1 20); do
+          rm -rf "$key_dir"
+          ( SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true ) &
+          ( SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true ) &
+          wait
+          if ! diff <(ssh-keygen -y -f "$key_dir/ssh_key") "$key_dir/ssh_key.pub" > /dev/null; then
+            echo "mismatched keypair committed on attempt $i" >&2
+            exit 1
+          fi
+        done
+    """)
+
     # explicit-key.nix: the pre-existing fixture key is used as-is, not
     # self-generated -- proven by checking the rendered unit's own
     # SSH_KEY_PATH, not just that it evaluates.

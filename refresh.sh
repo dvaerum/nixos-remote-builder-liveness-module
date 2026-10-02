@@ -20,18 +20,28 @@ set -euo pipefail
 
 # Generate this peer's identity key on first use if nothing's there yet --
 # shared-default keys can be raced by several peers' independent ticks, so
-# generate into a scratch dir and lose gracefully (-n/no-clobber) if another
-# tick already won.
+# the whole key_dir (never anything else) is the atomic commit unit, not
+# the two files independently: committing them with two separate `mv`
+# calls let one tick's private key land paired with a DIFFERENT tick's
+# public key, a silently mismatched keypair that's never repaired (the
+# outer guard below only checks the private key's existence). Generating
+# into a scratch dir and renaming the whole dir into place is atomic --
+# POSIX rename(2) onto an existing non-empty directory fails outright
+# (ENOTEMPTY) rather than merging, so a losing tick gets an unambiguous
+# "someone else already committed" signal instead of silently clobbering.
 key_dir="$(dirname "$SSH_KEY_PATH")"
+key_name="$(basename "$SSH_KEY_PATH")"
 if [ ! -e "$SSH_KEY_PATH" ]; then
-  mkdir -p "$key_dir"
-  chmod 0711 "$key_dir"
-  tmpdir="$(mktemp -d)"
-  ssh-keygen -q -t ed25519 -N "" -f "$tmpdir/key" < /dev/null
-  mv -n "$tmpdir/key" "$SSH_KEY_PATH" || true
-  mv -n "$tmpdir/key.pub" "${SSH_KEY_PATH}.pub" || true
-  rm -rf "$tmpdir"
-  echo "nix-dynamic-builders: generated a new SSH identity at ${SSH_KEY_PATH}"
+  keys_parent="$(dirname "$key_dir")"
+  mkdir -p "$keys_parent"
+  scratch="$(mktemp -d "${keys_parent}/.tmp.XXXXXX")"
+  ssh-keygen -q -t ed25519 -N "" -f "$scratch/$key_name" < /dev/null
+  chmod 0711 "$scratch"
+  if mv -T "$scratch" "$key_dir" 2>/dev/null; then
+    echo "nix-dynamic-builders: generated a new SSH identity at ${SSH_KEY_PATH}"
+  else
+    rm -rf "$scratch"
+  fi
 fi
 # The private half is never touched beyond generation (root-only via
 # ssh-keygen's own default; an admin-provided key is the admin's own
