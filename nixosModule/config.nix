@@ -10,6 +10,11 @@ let
 
   featureList = features: if features == [ ] then "-" else lib.concatStringsSep "," features;
 
+  # One real value threaded into both refresh.sh (the caller) and
+  # dispatch.sh (the matcher), instead of the same literal independently
+  # typed in both files with nothing enforcing agreement between them.
+  featureQuerySentinel = "nix-dynamic-builders-query-features";
+
   # The shared default key's own path, independent of any specific peer --
   # used both by peers that inherit it (resolveSshKeyPath below) and by
   # show-key's own "_default" entry (keyMapFile below). Keeping this in one
@@ -131,7 +136,7 @@ in
       # account it lands on.
       openssh.authorizedKeys.keys = lib.mapAttrsToList (
         _: peerCfg:
-        ''command="${lib.getExe dispatchScript} ${toString peerCfg.niceLevel}",restrict ${peerCfg.publicKey}''
+        ''command="${lib.getExe dispatchScript} ${toString peerCfg.niceLevel} ${featureQuerySentinel}",restrict ${peerCfg.publicKey}''
       ) cfg.peers;
     };
 
@@ -182,6 +187,7 @@ in
             "PEER_MAX_JOBS=${toString peerCfg.maxJobs}"
             "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
             "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
+            "FEATURE_QUERY_COMMAND=${featureQuerySentinel}"
             "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
             "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
             "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"

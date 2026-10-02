@@ -6,10 +6,11 @@
 # host A's config carrying a static guess at host B's features that can
 # silently drift from reality.
 #
-# $1 is this peer's nice level, baked into the authorized_keys line
-# itself (one line per peer, each able to set its own) -- not read from
-# an env var, since sshd's forced command doesn't get refresh.sh's
-# environment.
+# $1 is this peer's nice level, $2 is the feature-query sentinel -- both
+# baked into the authorized_keys line itself (one line per peer, each
+# able to set its own nice level; the sentinel is the same Nix-level
+# value refresh.sh is also given, not a separately hand-typed copy of
+# it) since sshd's forced command doesn't get refresh.sh's environment.
 #
 # The default branch matters: nix-daemon constructs its OWN ssh-ng://
 # dispatch call independently of this module, so anything that ISN'T the
@@ -19,9 +20,10 @@
 set -euo pipefail
 
 nice_level="$1"
+feature_query_command="$2"
 
 case "${SSH_ORIGINAL_COMMAND:-}" in
-  nix-dynamic-builders-query-features)
+  "$feature_query_command")
     # --extra-experimental-features: don't depend on the receiving host's
     # own nix.conf happening to have nix-command enabled -- this dispatcher
     # picks its own invocation, not the peer's ambient config.

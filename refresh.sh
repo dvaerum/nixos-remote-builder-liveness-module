@@ -95,7 +95,11 @@ done
 # silently advertising zero features.
 live_supported_features="$PEER_SUPPORTED_FEATURES"
 if [ "$reachable" = "1" ]; then
-  raw="$(ssh "${ssh_opts[@]}" "${PEER_USER}@${PEER_HOSTNAME}" nix-dynamic-builders-query-features 2>/dev/null || true)"
+  # shellcheck disable=SC2029 # intentional: resolve locally to the fixed
+  # sentinel before it's sent, which dispatch.sh then matches against the
+  # SEPARATE, remote-side $SSH_ORIGINAL_COMMAND -- not the thing this
+  # check warns about (a variable meant to expand on the remote shell).
+  raw="$(ssh "${ssh_opts[@]}" "${PEER_USER}@${PEER_HOSTNAME}" "$FEATURE_QUERY_COMMAND" 2>/dev/null || true)"
   if [ -n "$raw" ]; then
     # nix config show prints a space-separated list; the machines-file
     # format wants comma-separated.
