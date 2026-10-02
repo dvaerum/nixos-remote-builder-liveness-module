@@ -50,6 +50,15 @@ in
         }
       );
       default = { };
+      example = lib.literalExpression ''
+        {
+          workstation.publicKey = "ssh-ed25519 AAAA...workstation's-public-key";
+          remote-site = {
+            publicKey = "ssh-ed25519 AAAA...remote-site's-public-key";
+            niceLevel = 15; # a shared, busier box -- be a little less polite
+          };
+        }
+      '';
       description = ''
         Peers authorized to connect to THIS host and dispatch builds here,
         keyed by an arbitrary name of your choosing. Convention is to use the

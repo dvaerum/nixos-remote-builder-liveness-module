@@ -155,6 +155,21 @@ attribute set of (submodule)
 { }
 ```
 
+
+
+*Example:*
+
+```nix
+{
+  workstation.publicKey = "ssh-ed25519 AAAA...workstation's-public-key";
+  remote-site = {
+    publicKey = "ssh-ed25519 AAAA...remote-site's-public-key";
+    niceLevel = 15; # a shared, busier box -- be a little less polite
+  };
+}
+
+```
+
 *Declared by:*
  - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions.nix)
 
