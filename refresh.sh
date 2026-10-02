@@ -17,6 +17,30 @@
 
 set -euo pipefail
 
+# Generate this peer's identity key on first use if nothing's there yet --
+# shared-default keys can be raced by several peers' independent ticks, so
+# generate into a scratch dir and lose gracefully (-n/no-clobber) if another
+# tick already won.
+key_dir="$(dirname "$SSH_KEY_PATH")"
+if [ ! -e "$SSH_KEY_PATH" ]; then
+  mkdir -p "$key_dir"
+  chmod 0711 "$key_dir"
+  tmpdir="$(mktemp -d)"
+  ssh-keygen -q -t ed25519 -N "" -f "$tmpdir/key" < /dev/null
+  mv -n "$tmpdir/key" "$SSH_KEY_PATH" || true
+  mv -n "$tmpdir/key.pub" "${SSH_KEY_PATH}.pub" || true
+  rm -rf "$tmpdir"
+  echo "nix-dynamic-builders: generated a new SSH identity at ${SSH_KEY_PATH}"
+fi
+# The private half is never touched beyond generation (root-only via
+# ssh-keygen's own default; an admin-provided key is the admin's own
+# responsibility to protect) -- but the public half's access policy is
+# re-applied every tick, so toggling publicKeyWorldReadable later takes
+# effect on the next tick rather than only at first generation.
+if [ -e "${SSH_KEY_PATH}.pub" ]; then
+  chmod "$PUBLIC_KEY_MODE" "${SSH_KEY_PATH}.pub"
+fi
+
 reachable=0
 for attempt in 1 2 3; do
   # The receiving side's authorized_keys forces its own command (restrict +

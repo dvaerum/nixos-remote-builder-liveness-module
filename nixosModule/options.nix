@@ -34,6 +34,35 @@ in
       '';
     };
 
+    sshKey = lib.mkOption {
+      type = lib.types.either lib.types.bool (lib.types.either lib.types.path lib.types.str);
+      # Deliberately no default -- every install must pick one of the three
+      # meanings below, rather than silently inheriting "generate one".
+      description = ''
+        The shared default identity key used by any peer that doesn't set
+        its own `peers.<name>.sshKey`:
+
+        - `true`: generate one at `baseDir/ssh-keys/_default/ssh_key` the
+          first time it's needed, if it doesn't already exist.
+        - `false`: no shared default -- every peer must set its own key, or
+          evaluation fails naming the peer that didn't.
+        - a path or string: use this exact pre-existing key as the shared
+          default.
+      '';
+    };
+
+    publicKeyWorldReadable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Whether this host's own generated/configured public keys are
+        readable by any local user (so `nix-dynamic-builders-show-key` just
+        works) or root-only (so the command needs sudo). Public keys aren't
+        secret, so `true` is the default; `peers.<name>.publicKeyWorldReadable`
+        inherits this unless a peer overrides it.
+      '';
+    };
+
     peers = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (
@@ -90,6 +119,28 @@ in
                   keypair and set this from your own host configuration. See
                   README.md's Setup section.
                 '';
+              };
+              sshKey = lib.mkOption {
+                type = lib.types.either lib.types.bool (lib.types.either lib.types.path lib.types.str);
+                default = false;
+                description = ''
+                  This peer's own identity key, overriding the shared
+                  default (`services.nixDynamicBuilders.sshKey`):
+
+                  - `false` (default): no override -- use the shared
+                    default, or fail evaluation if the shared default is
+                    itself disabled (`false`).
+                  - `true`: generate a key distinct to THIS peer at
+                    `baseDir/ssh-keys/<name>/ssh_key`, ignoring the shared
+                    default entirely.
+                  - a path or string: use this exact pre-existing key for
+                    this peer only.
+                '';
+              };
+              publicKeyWorldReadable = lib.mkOption {
+                type = lib.types.bool;
+                default = cfg.publicKeyWorldReadable;
+                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.publicKeyWorldReadable";
               };
             };
           }

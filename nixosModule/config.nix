@@ -10,6 +10,47 @@ let
 
   featureList = features: if features == [ ] then "-" else lib.concatStringsSep "," features;
 
+  # peerKey is a peer's own `sshKey` value (false | true | path/string).
+  # false means "no override -- use the shared default", which itself can
+  # be disabled (cfg.sshKey == false); that combination is caught by the
+  # assertions below, not here -- this still needs to return SOME string so
+  # evaluating it doesn't throw and mask the nicer assertion message.
+  resolveSshKeyPath =
+    peerName: peerKey:
+    if peerKey == false then
+      (
+        if cfg.sshKey == false then
+          "/dev/null/no-ssh-key-configured-for-${peerName}"
+        else if cfg.sshKey == true then
+          "${cfg.baseDir}/ssh-keys/_default/ssh_key"
+        else
+          cfg.sshKey
+      )
+    else if peerKey == true then
+      "${cfg.baseDir}/ssh-keys/${peerName}/ssh_key"
+    else
+      peerKey;
+
+  # A peer reusing the shared default key (sshKey == false) can't have its
+  # OWN say over that file's world-readability -- it's one file potentially
+  # shared by several peers, so the global toggle applies uniformly there.
+  # Only a peer with its own distinct key (sshKey == true or a path/string)
+  # can meaningfully override it for itself.
+  effectivePublicKeyWorldReadable =
+    peerCfg:
+    if peerCfg.sshKey == false then cfg.publicKeyWorldReadable else peerCfg.publicKeyWorldReadable;
+
+  # name -> resolved .pub path, consumed by nix-dynamic-builders-show-key.
+  # "_default" is only listed when a shared default key actually exists.
+  keyMapFile = pkgs.writeText "nix-dynamic-builders-keymap" (
+    lib.concatStringsSep "\n" (
+      lib.optional (cfg.sshKey != false) "_default\t${cfg.baseDir}/ssh-keys/_default/ssh_key.pub"
+      ++ lib.mapAttrsToList (
+        peerName: peerCfg: "${peerName}\t${resolveSshKeyPath peerName peerCfg.sshKey}.pub"
+      ) cfg.peers
+    )
+  );
+
   refreshScript = pkgs.writeShellApplication {
     name = "nix-dynamic-builders-refresh";
     runtimeInputs = [
@@ -17,6 +58,20 @@ let
       pkgs.coreutils
     ];
     text = builtins.readFile ../refresh.sh;
+  };
+
+  showKeyScript = pkgs.writeShellApplication {
+    name = "nix-dynamic-builders-show-key";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.fzf
+    ];
+    # KEY_MAP_FILE is the one piece of per-install data show-key.sh needs
+    # that isn't a per-invocation flag -- injected as a single line ahead
+    # of the otherwise-static script body, same pattern as refresh.sh's
+    # env-var wiring, just without a systemd unit to set it through.
+    text = "KEY_MAP_FILE=${keyMapFile}\n" + builtins.readFile ../show-key.sh;
   };
 in
 {
@@ -63,14 +118,24 @@ in
     # per-path signature check.
     nix.settings.trusted-users = [ "nix-remote-builder" ];
 
-    # ── dispatching side: what THIS host uses to reach the peer ─────────
-    sops.secrets."nix-dynamic-builders/ssh-key" = {
-      owner = "root"; # nix-daemon dispatches builds as root
-      mode = "0400";
-    };
+    assertions = lib.mapAttrsToList (peerName: peerCfg: {
+      assertion = !(peerCfg.sshKey == false && cfg.sshKey == false);
+      message = ''
+        services.nixDynamicBuilders.peers.${peerName}.sshKey: no key available --
+        the shared default (services.nixDynamicBuilders.sshKey) is disabled
+        (false) and this peer didn't set its own.
+      '';
+    }) cfg.peers;
 
+    environment.systemPackages = [ showKeyScript ];
+
+    # ── dispatching side: what THIS host uses to reach the peer ─────────
+    # 0711: world can traverse by exact (documented, fixed) filename --
+    # ssh_key.pub -- but can't list the directory. Actual read access to
+    # any given file is gated by that file's own mode, set below per key.
     systemd.tmpfiles.rules = [
-      "d ${cfg.baseDir} 0750 root root -"
+      "d ${cfg.baseDir} 0711 root root -"
+      "d ${cfg.baseDir}/ssh-keys 0711 root root -"
     ];
 
     systemd.services = lib.mapAttrs' (
@@ -97,7 +162,8 @@ in
             "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
             "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
             "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
-            "SSH_KEY_PATH=${config.sops.secrets."nix-dynamic-builders/ssh-key".path}"
+            "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
+            "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
             "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
             "FRAGMENT_FILE=${cfg.runtimeDir}/machines.d/${peerName}"
             "MACHINES_FILE=${cfg.runtimeDir}/machines"

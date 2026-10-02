@@ -80,27 +80,18 @@ for the host-key-checking and trust-model rationale.
 
 ## Setup
 
-This module is symmetric and mutual by design: the same keypair
-authorizes builds in *both* directions between two machines. Generate
-one keypair, use its public half on both hosts.
+Each host gets its own identity key -- never the same private key copied
+onto two hosts. By default (`sshKey = true`) a key is generated for you
+on the first probe tick, no `ssh-keygen` or secrets manager required; set
+it to a path/string instead if you'd rather manage the key yourself, or
+to `false` to require every peer to set its own key explicitly.
 
-1. Generate a dedicated keypair (not an admin/login key):
+Since the key is generated at runtime, its public half isn't known at
+eval time -- wiring up a peer relationship is a two-step bootstrap:
 
-   ```bash
-   ssh-keygen -t ed25519 -N "" -f nix-dynamic-builders_ed25519 \
-     -C "nix-dynamic-builders (mutual, <host-a> <-> <host-b>)"
-   ```
-
-2. Put the **private** key where your secrets manager can hand NixOS a
-   decrypted path. This module expects
-   `config.sops.secrets."nix-dynamic-builders/ssh-key".path` to exist
-   -- i.e. you're expected to be using
-   [sops-nix](https://github.com/Mic92/sops-nix) and to add an entry
-   named exactly `nix-dynamic-builders/ssh-key` to each host's secrets
-   file, owned by root, containing the private key content.
-
-3. On **each** host, import this module and configure the other host
-   as the peer, with the **public** key content:
+1. On **each** host, import this module and enable it with the peer's
+   `publicKey` left as a placeholder for now (any string; it'll be
+   replaced in step 3):
 
    ```nix
    {
@@ -116,35 +107,55 @@ one keypair, use its public half on both hosts.
      peers.host-b = {
        maxJobs = 8; # size below host B's real thread count if it's a
                     # dual-use machine someone also works on directly
-       publicKey = builtins.readFile ./nix-dynamic-builders_ed25519.pub;
+       publicKey = "placeholder -- replaced in step 3";
      };
    };
    ```
 
-   ```nix
-   # host B's configuration (mirror)
-   services.nixDynamicBuilders = {
-     enable = true;
-     peers.host-a = {
-       maxJobs = 8;
-       publicKey = builtins.readFile ./nix-dynamic-builders_ed25519.pub;
-     };
-   };
-   ```
+2. Deploy both hosts. Each starts generating its own key and probing the
+   other (which will fail until step 3 -- that's expected).
 
-   A host can list more than one peer under `peers`, each keyed by its own
-   name (which also becomes its hostname by default -- set `hostname`
-   explicitly only if the peer's reachable name differs from the name you
-   give it here).
+3. On each host, run `nix-dynamic-builders-show-key host-b` (substituting
+   whichever peer name you used) to print that key's public half, and
+   paste it into the *other* host's `publicKey` -- i.e. host A's real
+   key goes into host B's config, and vice versa. Redeploy both.
 
-4. Deploy both. Each host starts probing the other every 60s; while
-   either peer is offline, that direction just quietly builds locally.
+Once that's done, both hosts quietly probe each other every 60s and the
+chicken-and-egg bootstrap step is never needed again, even if a key is
+later regenerated -- just repeat step 3 for whichever side changed.
+
+If you'd rather skip the bootstrap step, generate a keypair yourself
+(`ssh-keygen -t ed25519 -N "" -f nix-dynamic-builders_ed25519`) and point
+`sshKey` at the private half -- then both sides' `publicKey` are known
+upfront and a single deploy is enough:
+
+```nix
+# host A's configuration
+services.nixDynamicBuilders = {
+  enable = true;
+  sshKey = ./nix-dynamic-builders_ed25519;
+  peers.host-b = {
+    maxJobs = 8;
+    publicKey = builtins.readFile ./nix-dynamic-builders_ed25519.pub;
+  };
+};
+```
+
+A host can list more than one peer under `peers`, each keyed by its own
+name (which also becomes its hostname by default -- set `hostname`
+explicitly only if the peer's reachable name differs from the name you
+give it here).
 
 ## Options reference
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `services.nixDynamicBuilders.enable` | bool | `false` | Enable this host's probing timers + receiving-side user |
+| `services.nixDynamicBuilders.baseDir` | path | `/var/lib/nix-dynamic-builders` | Persistent state: SSH keys, `known_hosts` |
+| `services.nixDynamicBuilders.knownHostsFile` | path | `"${baseDir}/known_hosts"` | TOFU known_hosts file -- see docs/decisions/0002 |
+| `services.nixDynamicBuilders.runtimeDir` | path | `/run/nix-dynamic-builders` | Ephemeral (tmpfs) runtime state: the machines file and per-peer fragments |
+| `services.nixDynamicBuilders.sshKey` | `true`\|`false`\|path\|str | *(required)* | Shared default identity key: generate (`true`), disable (`false`), or use this exact pre-existing key |
+| `services.nixDynamicBuilders.publicKeyWorldReadable` | bool | `true` | Whether generated/configured public keys are readable by any local user (so `show-key` just works) or root-only |
 | `services.nixDynamicBuilders.peers.<name>.hostname` | str | *(attribute name)* | The peer's hostname, probed and dispatched to |
 | `services.nixDynamicBuilders.peers.<name>.system` | str | `"x86_64-linux"` | The peer's Nix `system` string |
 | `services.nixDynamicBuilders.peers.<name>.maxJobs` | int | *(required)* | The peer's own `maxJobs` for this builder entry |
@@ -152,6 +163,12 @@ one keypair, use its public half on both hosts.
 | `services.nixDynamicBuilders.peers.<name>.supportedFeatures` | list of str | `["kvm" "big-parallel"]` | |
 | `services.nixDynamicBuilders.peers.<name>.mandatoryFeatures` | list of str | `[ ]` | |
 | `services.nixDynamicBuilders.peers.<name>.publicKey` | str | *(required)* | The peer's public key, authorized to connect here as `nix-remote-builder` |
+| `services.nixDynamicBuilders.peers.<name>.sshKey` | `false`\|`true`\|path\|str | `false` | Override the shared default: `false` inherits it (erroring if it's disabled), `true` generates a key distinct to this peer, a path/string uses that exact key |
+| `services.nixDynamicBuilders.peers.<name>.publicKeyWorldReadable` | bool | *(inherits `publicKeyWorldReadable`)* | Only meaningful when this peer has its own distinct key (`sshKey` isn't `false`) |
+
+`nix-dynamic-builders-show-key <peer-name>|--default|--fzf` prints a
+public key (not secret) for pasting into the other host's `publicKey` --
+see Setup above. Run with no arguments for a list of known names.
 
 ## Trust model
 
