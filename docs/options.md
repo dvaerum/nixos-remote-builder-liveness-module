@@ -310,8 +310,7 @@ list of string
 
 The peer’s own maxJobs\. For a dual-use machine (a workstation
 someone also works on interactively, not a dedicated build box),
-size this below its real thread count to leave headroom –
-see docs/decisions/0001 for the reasoning\.
+size this below its real thread count to leave headroom\.
 
 
 

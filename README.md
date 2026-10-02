@@ -106,10 +106,11 @@ why the test suite runs on `systemd-nspawn` rather than QEMU.
 ## Setup
 
 Each host gets its own identity key -- never the same private key copied
-onto two hosts. By default (`sshKey = true`) a key is generated for you
-on the first probe tick, no `ssh-keygen` or secrets manager required; set
-it to a path/string instead if you'd rather manage the key yourself, or
-to `false` to require every peer to set its own key explicitly.
+onto two hosts. `sshKey` has no default -- every install must pick one
+of three meanings explicitly: `true` generates a key for you on the
+first probe tick (no `ssh-keygen` or secrets manager required), a
+path/string points at a key you manage yourself, and `false` requires
+every peer to set its own key explicitly.
 
 Since the key is generated at runtime, its public half isn't known at
 eval time -- wiring up a peer relationship is a two-step bootstrap:
@@ -129,6 +130,7 @@ eval time -- wiring up a peer relationship is a two-step bootstrap:
    # host A's configuration
    services.nixDynamicBuilders = {
      enable = true;
+     sshKey = true; # generate on first use, no ssh-keygen/secrets manager needed
      peers.host-b = {
        maxJobs = 8; # size below host B's real thread count if it's a
                     # dual-use machine someone also works on directly

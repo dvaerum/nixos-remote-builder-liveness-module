@@ -185,11 +185,13 @@ in
           # completes, not just at reboot.
           RuntimeDirectory = "nix-dynamic-builders";
           RuntimeDirectoryPreserve = "yes";
-          # Grouped and ordered to match the phases refresh.sh itself
-          # reads these in (key gen -> ssh_opts -> probe loop -> feature
-          # query -> fragment write -> reassembly), not alphabetically or
-          # by category -- so "which concern owns this var" is visible
-          # here without cross-referencing refresh.sh's own comments.
+          # Grouped by the phases refresh.sh itself reads these in (key
+          # gen -> ssh_opts -> probe loop -> feature query -> fragment
+          # write -> reassembly), not alphabetically or by category --
+          # so "which concern owns this var" is visible without cross-
+          # referencing refresh.sh's own comments. Order WITHIN a group
+          # isn't significant (refresh.sh doesn't read every var in a
+          # group in this exact sequence).
           Environment = [
             # Key generation
             "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
