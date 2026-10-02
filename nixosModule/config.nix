@@ -99,6 +99,7 @@ in
             "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
             "SSH_KEY_PATH=${config.sops.secrets."nix-dynamic-builders/ssh-key".path}"
             "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
+            "FRAGMENT_FILE=${cfg.runtimeDir}/machines.d/${peerName}"
             "MACHINES_FILE=${cfg.runtimeDir}/machines"
           ];
         };

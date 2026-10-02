@@ -45,7 +45,11 @@ let
       '';
     };
 
-  peerConfig = hostname: {
+  # peerHostnames: list of OTHER hosts this container should probe. Plain
+  # builtins only (map/listToAttrs) -- this file is a bare attrset handed
+  # straight to pkgs.testers.nixosTest, not a module function, so there's
+  # no `lib` in scope here the way there is inside the module configs below.
+  peerConfig = peerHostnames: {
     imports = [
       ../../nixosModule
       sopsStub
@@ -53,10 +57,15 @@ let
     services.openssh.enable = true;
     services.nixDynamicBuilders = {
       enable = true;
-      peers.${hostname} = {
-        maxJobs = 2;
-        publicKey = testSshPublicKey;
-      };
+      peers = builtins.listToAttrs (
+        map (hostname: {
+          name = hostname;
+          value = {
+            maxJobs = 2;
+            publicKey = testSshPublicKey;
+          };
+        }) peerHostnames
+      );
     };
   };
 in
@@ -64,8 +73,14 @@ in
   name = "nix-dynamic-builders-liveness";
 
   containers = {
-    alice = peerConfig "bob";
-    bob = peerConfig "alice";
+    # alice has two peers -- the real proof that fragment-per-peer writes
+    # don't clobber each other, not just that the single-peer path works.
+    alice = peerConfig [
+      "bob"
+      "carol"
+    ];
+    bob = peerConfig [ "alice" ];
+    carol = peerConfig [ "alice" ];
   };
 
   testScript = ''
@@ -75,17 +90,24 @@ in
     # that's actually active at this point, not the one that isn't yet.
     alice.wait_for_unit("sshd.socket")
     bob.wait_for_unit("sshd.socket")
+    carol.wait_for_unit("sshd.socket")
 
-    # Force a tick now instead of waiting out the real 60s timer.
+    # Force both of alice's peer ticks now instead of waiting out the real
+    # 60s timer, and confirm BOTH fragments land in the assembled file --
+    # not just that one peer's write doesn't crash, but that two peers'
+    # independent fragment writes genuinely coexist.
     alice.succeed("systemctl start nix-dynamic-builders-refresh-bob.service")
+    alice.succeed("systemctl start nix-dynamic-builders-refresh-carol.service")
     alice.wait_until_succeeds("grep -q bob /run/nix-dynamic-builders/machines")
+    alice.wait_until_succeeds("grep -q carol /run/nix-dynamic-builders/machines")
 
-    # Peer goes down -> next tick drops it back to an empty file
-    # (silent fall-back-to-local), not a stale stuck entry. Stop the
-    # socket, not sshd.service -- the latter is a transient per-connection
-    # unit under socket activation and usually isn't even loaded.
+    # bob goes down -> next tick drops ONLY bob's line (silent fall-back-to-
+    # local for that one direction), carol's fragment is untouched. Stop
+    # the socket, not sshd.service -- the latter is a transient per-
+    # connection unit under socket activation and usually isn't even loaded.
     bob.succeed("systemctl stop sshd.socket")
     alice.succeed("systemctl start nix-dynamic-builders-refresh-bob.service")
-    alice.wait_until_succeeds("test ! -s /run/nix-dynamic-builders/machines")
+    alice.wait_until_succeeds("! grep -q bob /run/nix-dynamic-builders/machines")
+    alice.succeed("grep -q carol /run/nix-dynamic-builders/machines")
   '';
 }

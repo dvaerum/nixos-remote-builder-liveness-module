@@ -1,10 +1,15 @@
-# Probe the peer's liveness and atomically rewrite the dynamic nix builders
-# file. Runs as a oneshot, triggered by nix-dynamic-builders-refresh.timer --
-# every tick is fully self-contained (no state persisted between runs): up to
-# three quick SSH connect attempts decide THIS tick's answer, then the file is
-# replaced via write-temp-then-rename so nix-daemon (which re-reads it fresh
-# on every build dispatch, per src/libstore/machines.cc -- no caching) never
-# observes a half-written file.
+# Probe the peer's liveness and atomically rewrite this peer's own fragment
+# of the dynamic nix builders file, then reassemble the full file from
+# every peer's current fragment. Runs as a oneshot, triggered by this
+# peer's own nix-dynamic-builders-refresh-<peer>.timer -- every tick is
+# fully self-contained (no state persisted between runs): up to three
+# quick SSH connect attempts decide THIS tick's answer. Each peer only
+# ever writes its OWN fragment file, never anyone else's -- so concurrent
+# per-peer timers can't race each other -- and both the fragment write and
+# the final reassembly go through write-temp-then-rename, so nix-daemon
+# (which re-reads the assembled file fresh on every build dispatch, per
+# src/libstore/machines.cc -- no caching) never observes a half-written
+# file either way.
 #
 # Nix's `builders = @file` has no signature-verification step for build
 # results (unlike a substituter path) -- the peer is trusted exactly as much
@@ -42,8 +47,9 @@ for attempt in 1 2 3; do
   fi
 done
 
-mkdir -p "$(dirname "$MACHINES_FILE")"
-tmp="$(mktemp "${MACHINES_FILE}.XXXXXX")"
+fragments_dir="$(dirname "$FRAGMENT_FILE")"
+mkdir -p "$fragments_dir"
+tmp="$(mktemp "${FRAGMENT_FILE}.XXXXXX")"
 
 if [ "$reachable" = "1" ]; then
   # storeUri system sshKey maxJobs speedFactor supportedFeatures mandatoryFeatures publicHostKey
@@ -60,4 +66,15 @@ else
   echo "nix-dynamic-builders: ${PEER_HOSTNAME} unreachable after 3 attempts -- dropped"
 fi
 
-mv -f "$tmp" "$MACHINES_FILE"
+mv -f "$tmp" "$FRAGMENT_FILE"
+
+# Reassemble the single file nix-daemon reads from every peer's current
+# fragment -- an empty fragment (peer unreachable) contributes nothing when
+# catted, so no separate "skip empty files" filtering is needed. `find`
+# (not a `fragments_dir/*` glob) so a tick where this is the only peer
+# configured so far -- nothing else in the directory yet -- doesn't fail
+# on an unmatched glob under `set -u`.
+mkdir -p "$(dirname "$MACHINES_FILE")"
+assembled="$(mktemp "${MACHINES_FILE}.XXXXXX")"
+find "$fragments_dir" -mindepth 1 -maxdepth 1 -type f -exec cat {} + > "$assembled"
+mv -f "$assembled" "$MACHINES_FILE"
