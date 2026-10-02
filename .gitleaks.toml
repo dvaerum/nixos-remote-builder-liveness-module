@@ -1,0 +1,14 @@
+title = "nixos-remote-builder-liveness-module gitleaks config"
+
+[extend]
+useDefault = true
+
+# tests/fixtures/test-ed25519 is a throwaway keypair generated solely for
+# tests/nixos/liveness.nix -- no real-world access, safe to commit. See that
+# file's own header comment.
+[allowlist]
+description = "Throwaway test-only SSH keypair, not a real secret"
+paths = [
+  '''tests/fixtures/test-ed25519$''',
+  '''tests/fixtures/test-ed25519\.pub$''',
+]
