@@ -421,11 +421,7 @@ string
 
 
 
-Per-peer override of the global
-` publicKeyWorldReadable `\. Only meaningful when this peer
-has its own distinct key (` sshKey ` isn’t ` false `) – a
-peer reusing the shared default key can’t have its own
-say over that one shared file’s permissions\.
+Per-peer override of the global ` publicKeyWorldReadable `\. Only meaningful when this peer has its own distinct key (` sshKey ` isn’t ` false `) – a peer reusing the shared default key can’t have its own say over that one shared file’s permissions\.
 
 
 
@@ -586,7 +582,7 @@ string
 
 
 
-How often each peer is re-probed after the first tick (systemd time span)\. Global only\.
+How often each peer is re-probed after the first tick (systemd time span)\. Global only – see docs/decisions/0003\.
 
 
 
@@ -611,7 +607,7 @@ string
 
 
 How soon after boot the first probe tick fires (systemd time span)\.
-Global only – see docs/decisions for why this isn’t per-peer\.
+Global only – see docs/decisions/0003 for why this isn’t per-peer\.
 
 
 

@@ -1,20 +1,35 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  options,
+  ...
+}:
 
 let
   cfg = config.services.nixDynamicBuilders;
 
-  # The 5 SSH tunables below are each declared twice -- once globally,
-  # once as a per-peer override inheriting that global value -- with an
-  # identical shape every time. One helper for the override half instead
-  # of repeating it 5 times (the global half still varies enough in
-  # description/default to stay written out separately).
+  # Several options below are declared twice -- once globally, once as a
+  # per-peer override inheriting that global value -- with an identical
+  # shape every time. One helper for the override half instead of
+  # repeating it (the global half still varies enough in
+  # description/default to stay written out separately). The type is
+  # read back from the already-declared global option rather than
+  # re-typed here: narrowing the global enum (say) then automatically
+  # narrows every peer override too, instead of needing a second,
+  # easy-to-forget manual edit. extraDescription covers the one override
+  # (publicKeyWorldReadable) that needs a caveat sentence beyond the
+  # generic one-liner, so it doesn't have to sit hand-rolled outside the
+  # helper just for that.
   mkPeerOverride =
-    globalName: type:
+    globalName:
+    {
+      extraDescription ? "",
+    }:
     lib.mkOption {
-      inherit type;
+      type = options.services.nixDynamicBuilders.${globalName}.type;
       default = cfg.${globalName};
       defaultText = lib.literalExpression "config.services.nixDynamicBuilders.${globalName}";
-      description = "Per-peer override of the global `${globalName}`.";
+      description = "Per-peer override of the global `${globalName}`." + extraDescription;
     };
 in
 {
@@ -222,29 +237,14 @@ in
                     this peer only.
                 '';
               };
-              publicKeyWorldReadable = lib.mkOption {
-                type = lib.types.bool;
-                default = cfg.publicKeyWorldReadable;
-                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.publicKeyWorldReadable";
-                description = ''
-                  Per-peer override of the global
-                  `publicKeyWorldReadable`. Only meaningful when this peer
-                  has its own distinct key (`sshKey` isn't `false`) -- a
-                  peer reusing the shared default key can't have its own
-                  say over that one shared file's permissions.
-                '';
+              publicKeyWorldReadable = mkPeerOverride "publicKeyWorldReadable" {
+                extraDescription = " Only meaningful when this peer has its own distinct key (`sshKey` isn't `false`) -- a peer reusing the shared default key can't have its own say over that one shared file's permissions.";
               };
-              connectTimeout = mkPeerOverride "connectTimeout" lib.types.int;
-              strictHostKeyChecking = mkPeerOverride "strictHostKeyChecking" (
-                lib.types.enum [
-                  "yes"
-                  "accept-new"
-                  "no"
-                ]
-              );
-              probeRetries = mkPeerOverride "probeRetries" lib.types.int;
-              probeRetryDelay = mkPeerOverride "probeRetryDelay" lib.types.str;
-              niceLevel = mkPeerOverride "niceLevel" lib.types.int;
+              connectTimeout = mkPeerOverride "connectTimeout" { };
+              strictHostKeyChecking = mkPeerOverride "strictHostKeyChecking" { };
+              probeRetries = mkPeerOverride "probeRetries" { };
+              probeRetryDelay = mkPeerOverride "probeRetryDelay" { };
+              niceLevel = mkPeerOverride "niceLevel" { };
             };
           }
         )
