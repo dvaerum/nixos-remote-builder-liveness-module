@@ -60,6 +60,15 @@ let
     text = builtins.readFile ../refresh.sh;
   };
 
+  dispatchScript = pkgs.writeShellApplication {
+    name = "nix-dynamic-builders-dispatch";
+    runtimeInputs = [
+      pkgs.nix
+      pkgs.coreutils
+    ];
+    text = builtins.readFile ../dispatch.sh;
+  };
+
   showKeyScript = pkgs.writeShellApplication {
     name = "nix-dynamic-builders-show-key";
     runtimeInputs = [
@@ -103,15 +112,16 @@ in
       # "!" for auth purposes but isn't the locked sentinel, so SSH-key
       # login is allowed again.
       hashedPassword = "*";
-      # restrict,command= means this key can ONLY ever invoke nix-store
-      # --serve -- never a shell, never arbitrary commands, even if the
-      # private key half of this pair leaked. One line per configured
+      # restrict,command= means this key can ONLY ever invoke dispatchScript
+      # (which itself only ever runs nix-store --serve or a features query,
+      # see dispatch.sh) -- never a shell, never arbitrary commands, even if
+      # the private key half of this pair leaked. One line per configured
       # peer -- all mapping to this same shared account, since the forced
       # command already fully constrains each key regardless of which
       # account it lands on.
       openssh.authorizedKeys.keys = lib.mapAttrsToList (
         _: peerCfg:
-        ''command="nice -${toString peerCfg.niceLevel} nix-store --serve --write",restrict ${peerCfg.publicKey}''
+        ''command="${lib.getExe dispatchScript} ${toString peerCfg.niceLevel}",restrict ${peerCfg.publicKey}''
       ) cfg.peers;
     };
 

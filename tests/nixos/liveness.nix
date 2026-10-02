@@ -74,7 +74,18 @@ in
         probeRetries = 5;
       };
     };
-    bob = peerConfig [ "alice" ];
+    bob = {
+      imports = [ (peerConfig [ "alice" ]) ];
+      # A distinctive, real feature -- not present in alice's static
+      # peers.bob.supportedFeatures default (["kvm" "big-parallel"]) --
+      # to prove alice's assembled machines file picks this up live,
+      # without alice's own config ever mentioning it.
+      nix.settings.system-features = [
+        "kvm"
+        "big-parallel"
+        "nix-dynamic-builders-test-marker"
+      ];
+    };
     carol = peerConfig [ "alice" ];
   };
 
@@ -95,6 +106,12 @@ in
     alice.succeed("systemctl start nix-dynamic-builders-refresh-carol.service")
     alice.wait_until_succeeds("grep -q bob /run/nix-dynamic-builders/machines")
     alice.wait_until_succeeds("grep -q carol /run/nix-dynamic-builders/machines")
+
+    # supportedFeatures is live-fetched from the peer, not echoed from
+    # alice's own static config -- bob's real system-features includes a
+    # marker alice's peers.bob.supportedFeatures never mentions, and it
+    # shows up in the assembled file anyway.
+    alice.succeed("grep -q nix-dynamic-builders-test-marker /run/nix-dynamic-builders/machines")
 
     # bob goes down -> next tick drops ONLY bob's line (silent fall-back-to-
     # local for that one direction), carol's fragment is untouched. Stop

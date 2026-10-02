@@ -167,7 +167,7 @@ give it here).
 | `services.nixDynamicBuilders.peers.<name>.system` | str | `"x86_64-linux"` | The peer's Nix `system` string |
 | `services.nixDynamicBuilders.peers.<name>.maxJobs` | int | *(required)* | The peer's own `maxJobs` for this builder entry |
 | `services.nixDynamicBuilders.peers.<name>.speedFactor` | int | `1` | |
-| `services.nixDynamicBuilders.peers.<name>.supportedFeatures` | list of str | `["kvm" "big-parallel"]` | |
+| `services.nixDynamicBuilders.peers.<name>.supportedFeatures` | list of str | `["kvm" "big-parallel"]` | Fallback only -- each tick replaces this with the peer's real, live `nix config show system-features`, queried over the same restricted SSH channel; only used if that query fails |
 | `services.nixDynamicBuilders.peers.<name>.mandatoryFeatures` | list of str | `[ ]` | |
 | `services.nixDynamicBuilders.peers.<name>.publicKey` | str | *(required)* | The peer's public key, authorized to connect here as `nix-remote-builder` |
 | `services.nixDynamicBuilders.peers.<name>.sshKey` | `false`\|`true`\|path\|str | `false` | Override the shared default: `false` inherits it (erroring if it's disabled), `true` generates a key distinct to this peer, a path/string uses that exact key |
