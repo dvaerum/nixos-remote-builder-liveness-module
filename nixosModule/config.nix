@@ -10,10 +10,7 @@ let
 
   featureList = features: if features == [ ] then "-" else lib.concatStringsSep "," features;
 
-  # One real value threaded into both refresh.sh (the caller) and
-  # dispatch.sh (the matcher), instead of the same literal independently
-  # typed in both files with nothing enforcing agreement between them.
-  featureQuerySentinel = "nix-dynamic-builders-query-features";
+  featureQuerySentinel = import ./featureQuerySentinel.nix;
 
   # The shared default key's own path, independent of any specific peer --
   # used both by peers that inherit it (resolveSshKeyPath below) and by
