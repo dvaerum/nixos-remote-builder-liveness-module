@@ -6,8 +6,9 @@
 # peer going up or down takes effect on the very next build, no daemon
 # restart needed. See README.md for the full mechanism and setup, and
 # docs/decisions/ for the design rationale (why a live `@file` over a
-# static `nix.buildMachines`, why a shared mutual keypair, why TOFU
-# host-key checking for now).
+# static `nix.buildMachines`, per-host identity keys and why
+# `supportedFeatures` is live-fetched, why TOFU host-key checking for
+# now).
 {
   imports = [
     ./options.nix

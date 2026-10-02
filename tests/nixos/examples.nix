@@ -106,24 +106,17 @@ in
         "grep -qE 'SSH_KEY_PATH=.*test-ed25519$'"
     )
 
-    # custom-probe-tuning.nix: the global cadence override AND the
-    # per-peer SSH-tunable overrides both actually reach their rendered
-    # units, not just the peer that stayed on fleet-wide defaults.
+    # custom-probe-tuning.nix: the global cadence override reaches the
+    # rendered unit -- the one thing unique to this scenario. Per-peer
+    # SSH-tunable overrides (connectTimeout/probeRetries reaching one
+    # peer, the global default applying to another) are NOT re-asserted
+    # here: liveness.nix's bob/carol pair already proves that exact fact,
+    # and re-asserting it here would just duplicate it, undercutting this
+    # file's own stated scope (checking rendered units, not re-proving
+    # behavior liveness.nix already owns).
     customProbeTuning.succeed(
         "systemctl cat nix-dynamic-builders-refresh-workstation.timer | "
         "grep -q OnUnitActiveSec=5m"
-    )
-    customProbeTuning.succeed(
-        "systemctl cat nix-dynamic-builders-refresh-remote-site.service | "
-        "grep -q CONNECT_TIMEOUT=10"
-    )
-    customProbeTuning.succeed(
-        "systemctl cat nix-dynamic-builders-refresh-remote-site.service | "
-        "grep -q PROBE_RETRIES=5"
-    )
-    customProbeTuning.succeed(
-        "systemctl cat nix-dynamic-builders-refresh-workstation.service | "
-        "grep -q CONNECT_TIMEOUT=2"
     )
   '';
 }

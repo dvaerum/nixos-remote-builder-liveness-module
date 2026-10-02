@@ -49,5 +49,5 @@ as much as running `sudo` on each other locally:
   user (`nix.settings.trusted-users`), which is a meaningful privilege
   on its own.
 
-Do not point `peer.hostname` at a machine you would not otherwise be
+Do not point `peers.<name>.hostname` at a machine you would not otherwise be
 willing to run arbitrary `sudo` commands on.

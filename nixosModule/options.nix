@@ -122,14 +122,14 @@ in
       default = "30s";
       description = ''
         How soon after boot the first probe tick fires (systemd time span).
-        Global only -- see docs/decisions for why this isn't per-peer.
+        Global only -- see docs/decisions/0003 for why this isn't per-peer.
       '';
     };
 
     probeIntervalSec = lib.mkOption {
       type = lib.types.str;
       default = "60s";
-      description = "How often each peer is re-probed after the first tick (systemd time span). Global only.";
+      description = "How often each peer is re-probed after the first tick (systemd time span). Global only -- see docs/decisions/0003.";
     };
 
     peers = lib.mkOption {
