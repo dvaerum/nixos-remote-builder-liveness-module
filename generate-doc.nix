@@ -9,7 +9,10 @@ let
   inherit (pkgs) lib nixosOptionsDoc runCommand;
 
   eval = lib.evalModules {
-    modules = [ ./nixosModule/options.nix ];
+    modules = [
+      ./nixosModule/options.nix
+      ./nixosModule/userOptions.nix
+    ];
   };
   optionsDoc = nixosOptionsDoc {
     inherit (eval) options;

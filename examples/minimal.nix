@@ -8,9 +8,13 @@
   services.nixDynamicBuilders = {
     enable = true;
     sshKey = true; # generate on first use, no ssh-keygen/secrets manager needed
-    peers.host-b = {
-      maxJobs = 8;
-      publicKey = "placeholder -- replaced via nix-dynamic-builders-show-key";
-    };
+    peers.host-b.maxJobs = 8;
+  };
+
+  # Accepting connections FROM host-b is a separate, independently-enableable
+  # service -- see services.nixDynamicBuilderUser.enable's description.
+  services.nixDynamicBuilderUser = {
+    enable = true;
+    peers.host-b.publicKey = "placeholder -- replaced via nix-dynamic-builders-show-key";
   };
 }

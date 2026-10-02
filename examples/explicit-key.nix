@@ -16,9 +16,13 @@
   services.nixDynamicBuilders = {
     enable = true;
     sshKey = sshKeyPath;
-    peers.host-b = {
-      maxJobs = 8;
-      publicKey = builtins.readFile "${sshKeyPath}.pub";
-    };
+    peers.host-b.maxJobs = 8;
+  };
+
+  # Accepting connections FROM host-b is a separate, independently-enableable
+  # service -- see services.nixDynamicBuilderUser.enable's description.
+  services.nixDynamicBuilderUser = {
+    enable = true;
+    peers.host-b.publicKey = builtins.readFile "${sshKeyPath}.pub";
   };
 }

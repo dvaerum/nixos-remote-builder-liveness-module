@@ -17,10 +17,7 @@
 
     peers = {
       # Fleet-wide defaults are fine for this one.
-      workstation = {
-        maxJobs = 8;
-        publicKey = "placeholder -- replaced via nix-dynamic-builders-show-key";
-      };
+      workstation.maxJobs = 8;
 
       # A peer reached over a slower/less reliable link needs more
       # patience per attempt and more attempts before being declared
@@ -28,10 +25,22 @@
       # fleet-wide policy change.
       remote-site = {
         maxJobs = 4;
-        publicKey = "placeholder -- replaced via nix-dynamic-builders-show-key";
         connectTimeout = 10;
         probeRetries = 5;
         probeRetryDelay = "3";
+      };
+    };
+  };
+
+  # Accepting connections from these same two peers is a separate,
+  # independently-enableable service -- see
+  # services.nixDynamicBuilderUser.enable's description.
+  services.nixDynamicBuilderUser = {
+    enable = true;
+    peers = {
+      workstation.publicKey = "placeholder -- replaced via nix-dynamic-builders-show-key";
+      remote-site = {
+        publicKey = "placeholder -- replaced via nix-dynamic-builders-show-key";
         niceLevel = 15; # a shared, busier box -- be a little less polite
       };
     };

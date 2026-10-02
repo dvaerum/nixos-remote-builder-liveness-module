@@ -126,12 +126,6 @@ in
       description = "Seconds to sleep between failed attempts (passed straight to `sleep`, fractional values are fine).";
     };
 
-    niceLevel = lib.mkOption {
-      type = lib.types.int;
-      default = 19;
-      description = "`nice` priority for the receiving side's `nix-store --serve` -- a scheduling courtesy, not a security control.";
-    };
-
     probeOnBootSec = lib.mkOption {
       type = lib.types.str;
       default = "30s";
@@ -207,18 +201,6 @@ in
                   `docs/decisions/0003`.
                 '';
               };
-              publicKey = lib.mkOption {
-                type = lib.types.str;
-                description = ''
-                  The peer's public key (ed25519, authorized_keys line format --
-                  just the key material, no command= prefix), authorized to
-                  connect to THIS host as the nix-remote-builder user and dispatch
-                  builds here. Deliberately NOT shipped with this module: it's
-                  fleet-specific identity, not mechanism -- generate your own
-                  keypair and set this from your own host configuration. See
-                  README.md's Setup section.
-                '';
-              };
               sshKey = lib.mkOption {
                 type = lib.types.either lib.types.bool (lib.types.either lib.types.path lib.types.str);
                 default = false;
@@ -243,7 +225,6 @@ in
               strictHostKeyChecking = mkPeerOverride "strictHostKeyChecking" { };
               probeRetries = mkPeerOverride "probeRetries" { };
               probeRetryDelay = mkPeerOverride "probeRetryDelay" { };
-              niceLevel = mkPeerOverride "niceLevel" { };
             };
           }
         )

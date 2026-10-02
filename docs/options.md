@@ -69,6 +69,143 @@ lazy attribute set of raw value
 
 
 
+## services\.nixDynamicBuilderUser\.enable
+
+
+
+Whether to enable the nix-remote-builder account peers SSH into to dispatch builds here\.
+Independent of services\.nixDynamicBuilders\.enable – a host can accept
+builds from peers without ever dispatching to any peer of its own, or
+vice versa
+\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions.nix)
+
+
+
+## services\.nixDynamicBuilderUser\.niceLevel
+
+
+
+` nice ` priority for ` nix-store --serve ` – a scheduling courtesy, not a security control\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+
+```nix
+19
+```
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions.nix)
+
+
+
+## services\.nixDynamicBuilderUser\.peers
+
+
+
+Peers authorized to connect to THIS host and dispatch builds here,
+keyed by an arbitrary name of your choosing\. Convention is to use the
+same name this same peer has under ` services.nixDynamicBuilders.peers `
+on the other host, but nothing enforces that link – the two option
+trees are independent, which is the whole point: a peer relationship
+can be one-directional (one side dispatches, the other only
+accepts), and a receive-only host only ever appears under this
+option, never under ` services.nixDynamicBuilders.peers `\.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions.nix)
+
+
+
+## services\.nixDynamicBuilderUser\.peers\.\<name>\.niceLevel
+
+
+
+Per-peer override of the global ` niceLevel `\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+
+```nix
+config.services.nixDynamicBuilderUser.niceLevel
+```
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions.nix)
+
+
+
+## services\.nixDynamicBuilderUser\.peers\.\<name>\.publicKey
+
+
+
+The peer’s public key (ed25519, authorized_keys line format –
+just the key material, no command= prefix), authorized to
+connect to THIS host as the nix-remote-builder user and dispatch
+builds here\. Deliberately NOT shipped with this module: it’s
+fleet-specific identity, not mechanism – generate your own
+keypair and set this from your own host configuration\. See
+README\.md’s Setup section\.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/userOptions.nix)
+
+
+
 ## services\.nixDynamicBuilders\.enable
 
 
@@ -167,30 +304,6 @@ absolute path
 
 ```nix
 "${config.services.nixDynamicBuilders.baseDir}/known_hosts"
-```
-
-*Declared by:*
- - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
-
-
-
-## services\.nixDynamicBuilders\.niceLevel
-
-
-
-` nice ` priority for the receiving side’s ` nix-store --serve ` – a scheduling courtesy, not a security control\.
-
-
-
-*Type:*
-signed integer
-
-
-
-*Default:*
-
-```nix
-19
 ```
 
 *Declared by:*
@@ -322,30 +435,6 @@ signed integer
 
 
 
-## services\.nixDynamicBuilders\.peers\.\<name>\.niceLevel
-
-
-
-Per-peer override of the global ` niceLevel `\.
-
-
-
-*Type:*
-signed integer
-
-
-
-*Default:*
-
-```nix
-config.services.nixDynamicBuilders.niceLevel
-```
-
-*Declared by:*
- - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
-
-
-
 ## services\.nixDynamicBuilders\.peers\.\<name>\.probeRetries
 
 
@@ -388,28 +477,6 @@ string
 ```nix
 config.services.nixDynamicBuilders.probeRetryDelay
 ```
-
-*Declared by:*
- - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
-
-
-
-## services\.nixDynamicBuilders\.peers\.\<name>\.publicKey
-
-
-
-The peer’s public key (ed25519, authorized_keys line format –
-just the key material, no command= prefix), authorized to
-connect to THIS host as the nix-remote-builder user and dispatch
-builds here\. Deliberately NOT shipped with this module: it’s
-fleet-specific identity, not mechanism – generate your own
-keypair and set this from your own host configuration\. See
-README\.md’s Setup section\.
-
-
-
-*Type:*
-string
 
 *Declared by:*
  - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)

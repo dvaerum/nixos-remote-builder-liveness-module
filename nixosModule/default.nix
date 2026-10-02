@@ -8,10 +8,13 @@
 # docs/decisions/ for the design rationale (why a live `@file` over a
 # static `nix.buildMachines`, per-host identity keys and why
 # `supportedFeatures` is live-fetched, why TOFU host-key checking for
-# now).
+# now, why the receiving-side account is its own independently-enableable
+# service).
 {
   imports = [
     ./options.nix
     ./config.nix
+    ./userOptions.nix
+    ./userConfig.nix
   ];
 }

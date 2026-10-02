@@ -40,6 +40,19 @@ let
           name = hostname;
           value = {
             maxJobs = 2;
+          };
+        }) peerHostnames
+      );
+    };
+    # Accepting connections from these same peers is a separate,
+    # independently-enableable service -- see the "dan" container below for
+    # the opposite combination (accepting without ever dispatching).
+    services.nixDynamicBuilderUser = {
+      enable = true;
+      peers = builtins.listToAttrs (
+        map (hostname: {
+          name = hostname;
+          value = {
             publicKey = testSshPublicKey;
           };
         }) peerHostnames
@@ -71,10 +84,10 @@ in
       services.nixDynamicBuilders.peers.selfgen = {
         hostname = "localhost";
         maxJobs = 1;
-        publicKey = testSshPublicKey;
         sshKey = true;
         publicKeyWorldReadable = false;
       };
+      services.nixDynamicBuilderUser.peers.selfgen.publicKey = testSshPublicKey;
       # Non-default SSH tunables on just one peer, to prove per-peer
       # override actually reaches the rendered unit -- carol (unchanged)
       # is the control case showing the global default still applies.
@@ -82,6 +95,11 @@ in
         connectTimeout = 7;
         probeRetries = 5;
       };
+      # A fourth peer, dan, who never dispatches anywhere -- only accepts.
+      # Proves services.nixDynamicBuilders and services.nixDynamicBuilderUser
+      # are genuinely independent: alice dispatches TO dan even though dan
+      # itself never enables services.nixDynamicBuilders at all.
+      services.nixDynamicBuilders.peers.dan.maxJobs = 1;
     };
     bob = {
       imports = [ (peerConfig [ "alice" ]) ];
@@ -96,6 +114,20 @@ in
       ];
     };
     carol = peerConfig [ "alice" ];
+
+    # Receive-only: services.nixDynamicBuilderUser WITHOUT importing
+    # peerConfig at all, so services.nixDynamicBuilders.enable stays at its
+    # default (false) -- no refresh timers, no show-key command, no
+    # /run/nix-dynamic-builders. Proves a host can accept builds from a peer
+    # without ever dispatching to any peer of its own.
+    dan = {
+      imports = [ ../../nixosModule ];
+      services.openssh.enable = true;
+      services.nixDynamicBuilderUser = {
+        enable = true;
+        peers.alice.publicKey = testSshPublicKey;
+      };
+    };
   };
 
   testScript = ''
@@ -106,6 +138,14 @@ in
     alice.wait_for_unit("sshd.socket")
     bob.wait_for_unit("sshd.socket")
     carol.wait_for_unit("sshd.socket")
+    dan.wait_for_unit("sshd.socket")
+
+    # dan: services.nixDynamicBuilderUser.enable alone, with
+    # services.nixDynamicBuilders left at its default (false) -- the
+    # receiving-side account exists, but none of the dispatching side does.
+    dan.succeed("id nix-remote-builder")
+    dan.fail("command -v nix-dynamic-builders-show-key")
+    dan.fail("test -d /run/nix-dynamic-builders")
 
     # Force both of alice's real-peer ticks now instead of waiting out the
     # real 60s timer, and confirm BOTH fragments land in the assembled file
@@ -115,6 +155,13 @@ in
     alice.succeed("systemctl start nix-dynamic-builders-refresh-carol.service")
     alice.wait_until_succeeds("grep -q bob /run/nix-dynamic-builders/machines")
     alice.wait_until_succeeds("grep -q carol /run/nix-dynamic-builders/machines")
+
+    # alice dispatches TO dan even though dan never enabled
+    # services.nixDynamicBuilders itself -- the real end-to-end proof that
+    # the two services are independent, not just that they evaluate
+    # independently.
+    alice.succeed("systemctl start nix-dynamic-builders-refresh-dan.service")
+    alice.wait_until_succeeds("grep -q dan /run/nix-dynamic-builders/machines")
 
     # supportedFeatures is live-fetched from the peer, not echoed from
     # alice's own static config -- bob's real system-features includes a
@@ -168,7 +215,7 @@ in
 
     # Bare invocation lists every known name.
     usage = alice.succeed("nix-dynamic-builders-show-key")
-    for name in ["_default", "bob", "carol", "selfgen"]:
+    for name in ["_default", "bob", "carol", "dan", "selfgen"]:
         assert name in usage, f"{name!r} missing from show-key's bare usage listing: {usage!r}"
 
     # Per-peer SSH tunable overrides actually reach the rendered unit...
