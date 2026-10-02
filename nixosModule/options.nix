@@ -2,6 +2,20 @@
 
 let
   cfg = config.services.nixDynamicBuilders;
+
+  # The 5 SSH tunables below are each declared twice -- once globally,
+  # once as a per-peer override inheriting that global value -- with an
+  # identical shape every time. One helper for the override half instead
+  # of repeating it 5 times (the global half still varies enough in
+  # description/default to stay written out separately).
+  mkPeerOverride =
+    globalName: type:
+    lib.mkOption {
+      inherit type;
+      default = cfg.${globalName};
+      defaultText = lib.literalExpression "config.services.nixDynamicBuilders.${globalName}";
+      description = "Per-peer override of the global `${globalName}`.";
+    };
 in
 {
   options.services.nixDynamicBuilders = {
@@ -220,40 +234,17 @@ in
                   say over that one shared file's permissions.
                 '';
               };
-              connectTimeout = lib.mkOption {
-                type = lib.types.int;
-                default = cfg.connectTimeout;
-                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.connectTimeout";
-                description = "Per-peer override of the global `connectTimeout`.";
-              };
-              strictHostKeyChecking = lib.mkOption {
-                type = lib.types.enum [
+              connectTimeout = mkPeerOverride "connectTimeout" lib.types.int;
+              strictHostKeyChecking = mkPeerOverride "strictHostKeyChecking" (
+                lib.types.enum [
                   "yes"
                   "accept-new"
                   "no"
-                ];
-                default = cfg.strictHostKeyChecking;
-                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.strictHostKeyChecking";
-                description = "Per-peer override of the global `strictHostKeyChecking`.";
-              };
-              probeRetries = lib.mkOption {
-                type = lib.types.int;
-                default = cfg.probeRetries;
-                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.probeRetries";
-                description = "Per-peer override of the global `probeRetries`.";
-              };
-              probeRetryDelay = lib.mkOption {
-                type = lib.types.str;
-                default = cfg.probeRetryDelay;
-                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.probeRetryDelay";
-                description = "Per-peer override of the global `probeRetryDelay`.";
-              };
-              niceLevel = lib.mkOption {
-                type = lib.types.int;
-                default = cfg.niceLevel;
-                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.niceLevel";
-                description = "Per-peer override of the global `niceLevel`.";
-              };
+                ]
+              );
+              probeRetries = mkPeerOverride "probeRetries" lib.types.int;
+              probeRetryDelay = mkPeerOverride "probeRetryDelay" lib.types.str;
+              niceLevel = mkPeerOverride "niceLevel" lib.types.int;
             };
           }
         )
