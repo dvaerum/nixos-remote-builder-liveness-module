@@ -180,23 +180,34 @@ in
           # completes, not just at reboot.
           RuntimeDirectory = "nix-dynamic-builders";
           RuntimeDirectoryPreserve = "yes";
+          # Grouped and ordered to match the phases refresh.sh itself
+          # reads these in (key gen -> ssh_opts -> probe loop -> feature
+          # query -> fragment write -> reassembly), not alphabetically or
+          # by category -- so "which concern owns this var" is visible
+          # here without cross-referencing refresh.sh's own comments.
           Environment = [
-            "PEER_HOSTNAME=${peerCfg.hostname}"
+            # Key generation
+            "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
+            "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
+            # Connection options (ssh_opts)
+            "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
+            "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
+            "STRICT_HOST_KEY_CHECKING=${peerCfg.strictHostKeyChecking}"
+            # Probe loop
             "PEER_USER=nix-remote-builder"
+            "PEER_HOSTNAME=${peerCfg.hostname}"
+            "PROBE_RETRIES=${toString peerCfg.probeRetries}"
+            "PROBE_RETRY_DELAY=${peerCfg.probeRetryDelay}"
+            # Feature query
+            "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
+            "FEATURE_QUERY_COMMAND=${featureQuerySentinel}"
+            # Fragment write
             "PEER_SYSTEM=${peerCfg.system}"
             "PEER_MAX_JOBS=${toString peerCfg.maxJobs}"
             "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
-            "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
-            "FEATURE_QUERY_COMMAND=${featureQuerySentinel}"
             "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
-            "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
-            "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
-            "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
-            "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
-            "STRICT_HOST_KEY_CHECKING=${peerCfg.strictHostKeyChecking}"
-            "PROBE_RETRIES=${toString peerCfg.probeRetries}"
-            "PROBE_RETRY_DELAY=${peerCfg.probeRetryDelay}"
             "FRAGMENT_FILE=${cfg.runtimeDir}/machines.d/${peerName}"
+            # Reassembly
             "MACHINES_FILE=${cfg.runtimeDir}/machines"
           ];
         };
