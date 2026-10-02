@@ -54,7 +54,7 @@ forced `authorized_keys` command decides what to actually run:
 
 ```mermaid
 flowchart TD
-    P["services.nixDynamicBuilders.peers.#60;name#62;.publicKey<br/>installed in nix-remote-builder's authorized_keys,<br/>one line per configured peer"]
+    P["services.nixDynamicBuilderUser.peers.#60;name#62;.publicKey<br/>installed in nix-remote-builder's authorized_keys,<br/>one line per configured peer"]
     Q["command=#34;nix-dynamic-builders-dispatch #60;nice-level#62; nix-dynamic-builders-query-features#34;,restrict #60;pubkey#62;<br/>-- can NEVER open a shell or run anything else even if the<br/>private half leaks: the forced command always runs regardless<br/>of what the client asks for"]
     R{"$SSH_ORIGINAL_COMMAND ==<br/>nix-dynamic-builders-query-features ?"}
     S["nix config show system-features<br/>(the live-feature query)"]
@@ -76,9 +76,18 @@ for the host-key-checking and trust-model rationale,
 for the multi-peer/per-host-identity-key design and why `supportedFeatures`
 is live while `mandatoryFeatures` stays static, and
 [`docs/decisions/0004`](docs/decisions/0004-nspawn-test-backend.md) for
-why the test suite runs on `systemd-nspawn` rather than QEMU.
+why the test suite runs on `systemd-nspawn` rather than QEMU, and
+[`docs/decisions/0005`](docs/decisions/0005-independent-builder-user-service.md)
+for why dispatching to peers and accepting connections from peers are
+two independently-enableable services.
 
 ## Setup
+
+Dispatching to a peer (`services.nixDynamicBuilders`) and accepting
+connections from a peer (`services.nixDynamicBuilderUser`) are
+independent -- a bidirectional pair of hosts configures both on each
+side; a receive-only build-serving box configures only the latter (see
+[`examples/receive-only.nix`](examples/receive-only.nix)).
 
 Each host gets its own identity key -- never the same private key copied
 onto two hosts. `sshKey` has no default -- every install must pick one
@@ -88,11 +97,12 @@ path/string points at a key you manage yourself, and `false` requires
 every peer to set its own key explicitly.
 
 Since the key is generated at runtime, its public half isn't known at
-eval time -- wiring up a peer relationship is a two-step bootstrap:
+eval time -- wiring up a bidirectional peer relationship is a two-step
+bootstrap:
 
-1. On **each** host, import this module and enable it with the peer's
-   `publicKey` left as a placeholder for now (any string; it'll be
-   replaced in step 3):
+1. On **each** host, import this module and enable both services, with
+   the peer's `publicKey` left as a placeholder for now (any string;
+   it'll be replaced in step 3):
 
    ```nix
    {
@@ -106,11 +116,12 @@ eval time -- wiring up a peer relationship is a two-step bootstrap:
    services.nixDynamicBuilders = {
      enable = true;
      sshKey = true; # generate on first use, no ssh-keygen/secrets manager needed
-     peers.host-b = {
-       maxJobs = 8; # size below host B's real thread count if it's a
-                    # dual-use machine someone also works on directly
-       publicKey = "placeholder -- replaced in step 3";
-     };
+     peers.host-b.maxJobs = 8; # size below host B's real thread count if it's
+                               # a dual-use machine someone also works on directly
+   };
+   services.nixDynamicBuilderUser = {
+     enable = true;
+     peers.host-b.publicKey = "placeholder -- replaced in step 3";
    };
    ```
 
@@ -119,8 +130,9 @@ eval time -- wiring up a peer relationship is a two-step bootstrap:
 
 3. On each host, run `nix-dynamic-builders-show-key host-b` (substituting
    whichever peer name you used) to print that key's public half, and
-   paste it into the *other* host's `publicKey` -- i.e. host A's real
-   key goes into host B's config, and vice versa. Redeploy both.
+   paste it into the *other* host's `services.nixDynamicBuilderUser.peers.<name>.publicKey`
+   -- i.e. host A's real key goes into host B's config, and vice versa.
+   Redeploy both.
 
 Once that's done, both hosts quietly probe each other every 60s and the
 chicken-and-egg bootstrap step is never needed again, even if a key is
@@ -147,31 +159,37 @@ secret, so it's fine to just paste its content directly:
 services.nixDynamicBuilders = {
   enable = true;
   sshKey = config.sops.secrets."nix-dynamic-builders-key".path;
-  peers.host-b = {
-    maxJobs = 8;
-    publicKey = "ssh-ed25519 AAAA...host-b's-real-public-key";
-  };
+  peers.host-b.maxJobs = 8;
+};
+services.nixDynamicBuilderUser = {
+  enable = true;
+  peers.host-b.publicKey = "ssh-ed25519 AAAA...host-b's-real-public-key";
 };
 ```
 
-A host can list more than one peer under `peers`, each keyed by its own
-name (which also becomes its hostname by default -- set `hostname`
+A host can list more than one peer under either service's `peers`, each
+keyed by its own name (under `services.nixDynamicBuilders.peers`, the
+name also becomes the peer's hostname by default -- set `hostname`
 explicitly only if the peer's reachable name differs from the name you
-give it here).
+give it here). Nothing requires the same name be used in both services'
+`peers` for what you consider "the same peer" -- see
+[`docs/decisions/0005`](docs/decisions/0005-independent-builder-user-service.md).
 
 ## Options reference
 
 See [`docs/options.md`](docs/options.md) (generated via `generate-doc.nix`)
-for the full option reference, or `nixosModule/options.nix` directly.
-See [`examples/`](examples/) for a working, tested set of scenarios
-(a single peer, two independent peers, a pre-existing keypair instead
-of self-generation, and tuning the probe itself) -- each one is
-exercised by `tests/nixos/examples.nix`, so a renamed/removed option
-breaks CI, not just the docs.
+for the full option reference, or `nixosModule/options.nix` and
+`nixosModule/userOptions.nix` directly. See [`examples/`](examples/) for
+a working, tested set of scenarios (a single peer, two independent peers,
+a pre-existing keypair instead of self-generation, tuning the probe
+itself, and a receive-only build-serving box) -- each one is exercised by
+`tests/nixos/examples.nix`, so a renamed/removed option breaks CI, not
+just the docs.
 
 `nix-dynamic-builders-show-key <peer-name>|--default|--fzf` prints a
-public key (not secret) for pasting into the other host's `publicKey` --
-see Setup above. Run with no arguments for a list of known names.
+public key (not secret) for pasting into the other host's
+`services.nixDynamicBuilderUser.peers.<name>.publicKey` -- see Setup
+above. Run with no arguments for a list of known names.
 
 ## Trust model
 
@@ -194,8 +212,11 @@ see `docs/decisions/0004`:
   real SSH, the assembled machines file picks up each live peer
   independently (proving fragment-per-peer writes don't clobber each
   other), falls back to empty for just the one direction that drops,
-  live-fetches a peer's real `system-features`, and exercises
-  self-generated keys, `show-key`, and the public-key-readability toggle.
+  live-fetches a peer's real `system-features`, exercises
+  self-generated keys, `show-key`, and the public-key-readability toggle,
+  and dispatches a real build to a fourth peer that only enables
+  `services.nixDynamicBuilderUser` -- proving the two services are
+  genuinely independent, not just independently-evaluating.
 - `tests/nixos/examples.nix`: every file under `examples/` actually
   evaluates and wires up the units it claims to.
 

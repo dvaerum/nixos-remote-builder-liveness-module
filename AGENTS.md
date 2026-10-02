@@ -9,7 +9,10 @@ peer: a systemd timer probes a peer machine's SSH reachability every
 60s and atomically rewrites a plain runtime file that `nix-daemon`
 re-reads fresh on every build dispatch (confirmed against
 `src/libstore/machines.cc` -- zero caching). A host can have any number
-of peers, each independently probed. See `docs/decisions/` for the
+of peers, each independently probed. Dispatching to peers
+(`services.nixDynamicBuilders`) and accepting connections from peers
+(`services.nixDynamicBuilderUser`) are two independently-enableable
+services -- see `docs/decisions/0005`. See `docs/decisions/` for the
 design reasoning behind each real choice (live `@file` vs static
 `nix.buildMachines`, TOFU host-key checking, per-host identity keys and
 why `supportedFeatures` is live-fetched, the `systemd-nspawn` test
@@ -23,8 +26,13 @@ language toolchain, nothing to version-pin beyond the flake itself.
 
 ```
 flake.nix          nixosModules.default + checks.<system>.{liveness,examples,optionsDocUpToDate}
-nixosModule/        options.nix (services.nixDynamicBuilders.*), config.nix (the actual
-                    systemd units/users/nix.settings wiring), default.nix (glue)
+nixosModule/        options.nix + config.nix: services.nixDynamicBuilders.* (dispatching to
+                    peers -- probing, the machines file, outbound SSH keys, show-key).
+                    userOptions.nix + userConfig.nix: services.nixDynamicBuilderUser.*
+                    (accepting connections from peers -- the nix-remote-builder account,
+                    authorized_keys, trusted-users). featureQuerySentinel.nix: the one
+                    literal both config.nix and userConfig.nix must agree on, shared
+                    rather than duplicated. default.nix: glue (imports all four).
 refresh.sh          the liveness-probe script, one instance per configured
                     peer, wrapped via pkgs.writeShellApplication in config.nix
                     -- edit this file directly, not an inline string
@@ -33,10 +41,10 @@ dispatch.sh         the receiving side's forced authorized_keys command --
                     supportedFeatures query, see docs/decisions/0003
 show-key.sh         nix-dynamic-builders-show-key's script body -- prints a
                     public key for the Setup bootstrap flow in README.md
-examples/           working, tested services.nixDynamicBuilders.* scenarios --
-                    one self-contained module fragment per file, indexed by
-                    examples/default.nix, each imported for real by
-                    tests/nixos/examples.nix
+examples/           working, tested services.nixDynamicBuilders.*/
+                    services.nixDynamicBuilderUser.* scenarios -- one self-contained
+                    module fragment per file, indexed by examples/default.nix, each
+                    imported for real by tests/nixos/examples.nix
 tests/nixos/        liveness.nix -- a real multi-peer nixosTest (systemd-nspawn,
                     see docs/decisions/0004): several peers probe each other
                     over real SSH, assert the assembled machines file tracks
@@ -65,8 +73,8 @@ generate-doc.nix    regenerates docs/options.md -- see "Documentation" below
 - Any new file referenced from Nix (`.nix` or not -- `dispatch.sh`,
   `show-key.sh`, a new `examples/*.nix`) must be `git add`-ed before Nix
   can see it at all -- flakes only evaluate git-tracked files.
-- Changing an option in `options.nix`: every option needs a
-  `description` -- `generate-doc.nix` builds with
+- Changing an option in `options.nix` or `userOptions.nix`: every option
+  needs a `description` -- `generate-doc.nix` builds with
   `documentation.nixos.options.warningsAreErrors` behavior (a missing
   description is a hard build failure, not a warning), so this is
   caught by the same gate as everything else, not a separate lint.
