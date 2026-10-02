@@ -14,7 +14,16 @@
 # authorized_keys.
 let
   testSshKey = ../fixtures/test-ed25519;
-  testSshPublicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDj28OND0mtMrx61UE2LXJt4EnQ0kDg5N+ORYze91Esl nixos-remote-builder-liveness-module test fixture (not a real secret)";
+  # Read from the real .pub fixture file, not a second hand-typed copy of
+  # the same value -- an admin-provided sshKey is expected to have a real
+  # .pub sibling on disk (same as any ssh-keygen output), which is exactly
+  # what nix-dynamic-builders-show-key --default reads. No `lib` in scope
+  # in this file (see below) to trim the trailing newline the usual way,
+  # so it's done with plain builtins instead.
+  testSshPublicKeyFile = builtins.readFile ../fixtures/test-ed25519.pub;
+  testSshPublicKey = builtins.substring 0 (
+    builtins.stringLength testSshPublicKeyFile - 1
+  ) testSshPublicKeyFile;
 
   # peerHostnames: list of OTHER hosts this container should probe. Plain
   # builtins only (map/listToAttrs) -- this file is a bare attrset handed
@@ -144,6 +153,23 @@ in
     # ...and show-key, run as that same non-root user, fails the same way
     # (no privilege logic of its own -- it's just the file permission).
     alice.fail("su nobody -s /bin/sh -c 'nix-dynamic-builders-show-key selfgen'")
+
+    # --default against a *path-literal* admin-provided sshKey (alice's
+    # global sshKey = testSshKey) is NOT exercised here -- Nix copies a
+    # referenced path into the store as its own independent, content-
+    # hashed object, so "the resolved store path + .pub" does not find a
+    # real sibling file the way it would on a real filesystem. That's a
+    # genuine, currently-unsolved design gap for that one specific shape
+    # of config, out of scope for this fix -- see
+    # tests/nixos/examples.nix's multiPeer scenario for --default tested
+    # against the *self-generated* case, where it works correctly (both
+    # halves are created together on disk by refresh.sh itself, no Nix
+    # store path arithmetic involved).
+
+    # Bare invocation lists every known name.
+    usage = alice.succeed("nix-dynamic-builders-show-key")
+    for name in ["_default", "bob", "carol", "selfgen"]:
+        assert name in usage, f"{name!r} missing from show-key's bare usage listing: {usage!r}"
 
     # Per-peer SSH tunable overrides actually reach the rendered unit...
     alice.succeed(

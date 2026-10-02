@@ -10,6 +10,18 @@ let
 
   featureList = features: if features == [ ] then "-" else lib.concatStringsSep "," features;
 
+  # The shared default key's own path, independent of any specific peer --
+  # used both by peers that inherit it (resolveSshKeyPath below) and by
+  # show-key's own "_default" entry (keyMapFile below). Keeping this in one
+  # place is deliberate: it was previously inlined separately in both
+  # spots, and the keyMapFile copy had drifted to always assume
+  # `cfg.sshKey == true` (the generated-key convention path), silently
+  # wrong whenever `cfg.sshKey` was instead an explicit pre-existing path --
+  # `nix-dynamic-builders-show-key --default` failed outright in exactly
+  # that (commonly-used) configuration.
+  resolveDefaultKeyPath =
+    if cfg.sshKey == true then "${cfg.baseDir}/ssh-keys/_default/ssh_key" else cfg.sshKey;
+
   # peerKey is a peer's own `sshKey` value (false | true | path/string).
   # false means "no override -- use the shared default", which itself can
   # be disabled (cfg.sshKey == false); that combination is caught by the
@@ -21,10 +33,8 @@ let
       (
         if cfg.sshKey == false then
           "/dev/null/no-ssh-key-configured-for-${peerName}"
-        else if cfg.sshKey == true then
-          "${cfg.baseDir}/ssh-keys/_default/ssh_key"
         else
-          cfg.sshKey
+          resolveDefaultKeyPath
       )
     else if peerKey == true then
       "${cfg.baseDir}/ssh-keys/${peerName}/ssh_key"
@@ -44,7 +54,7 @@ let
   # "_default" is only listed when a shared default key actually exists.
   keyMapFile = pkgs.writeText "nix-dynamic-builders-keymap" (
     lib.concatStringsSep "\n" (
-      lib.optional (cfg.sshKey != false) "_default\t${cfg.baseDir}/ssh-keys/_default/ssh_key.pub"
+      lib.optional (cfg.sshKey != false) "_default\t${resolveDefaultKeyPath}.pub"
       ++ lib.mapAttrsToList (
         peerName: peerCfg: "${peerName}\t${resolveSshKeyPath peerName peerCfg.sshKey}.pub"
       ) cfg.peers

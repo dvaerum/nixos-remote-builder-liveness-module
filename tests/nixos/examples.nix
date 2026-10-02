@@ -83,6 +83,15 @@ in
         done
     """)
 
+    # --default against a self-generated shared key: both halves exist
+    # together on disk (refresh.sh created them), so unlike the
+    # path-literal admin-provided case (not tested, see liveness.nix),
+    # the .pub-sibling convention genuinely applies here.
+    multiPeer.succeed(
+        "diff <(nix-dynamic-builders-show-key --default) "
+        "/var/lib/nix-dynamic-builders/ssh-keys/_default/ssh_key.pub"
+    )
+
     # explicit-key.nix: the pre-existing fixture key is used as-is, not
     # self-generated -- proven by checking the rendered unit's own
     # SSH_KEY_PATH, not just that it evaluates.
