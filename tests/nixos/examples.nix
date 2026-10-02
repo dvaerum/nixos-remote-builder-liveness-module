@@ -39,6 +39,12 @@ in
         examples.customProbeTuning
       ];
     };
+    receiveOnly = {
+      imports = [
+        nixosModule.nixosModules.default
+        examples.receiveOnly
+      ];
+    };
   };
 
   testScript = ''
@@ -145,5 +151,15 @@ in
         "systemctl cat nix-dynamic-builders-refresh-workstation.timer | "
         "grep -q OnUnitActiveSec=5m"
     )
+
+    # receive-only.nix: the nix-remote-builder account and its authorized_keys
+    # line exist even though services.nixDynamicBuilders is never mentioned --
+    # the whole point of the two services being independent. Real end-to-end
+    # connectivity for this exact combination is already covered by
+    # liveness.nix's "dan" container; this just keeps the example itself
+    # honest against the current option schema.
+    receiveOnly.succeed("id nix-remote-builder")
+    receiveOnly.succeed("grep -q restrict /etc/ssh/authorized_keys.d/nix-remote-builder")
+    receiveOnly.fail("command -v nix-dynamic-builders-show-key")
   '';
 }

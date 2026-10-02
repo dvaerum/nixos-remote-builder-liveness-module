@@ -21,6 +21,14 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    # This service's entire purpose is accepting SSH connections -- unlike
+    # the dispatching side (which only ever needs the `ssh` client, never a
+    # locally-running server), a host enabling this one has no other reason
+    # not to also run sshd. mkDefault, not an unconditional override: an
+    # admin who's explicitly configured services.openssh themselves (any
+    # value) still wins.
+    services.openssh.enable = lib.mkDefault true;
+
     users.groups.nix-remote-builder = { };
     users.users.nix-remote-builder = {
       isSystemUser = true;
