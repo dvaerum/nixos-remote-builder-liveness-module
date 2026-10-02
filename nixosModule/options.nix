@@ -63,6 +63,61 @@ in
       '';
     };
 
+    connectTimeout = lib.mkOption {
+      type = lib.types.int;
+      default = 2;
+      description = "Seconds `ssh -o ConnectTimeout` waits per probe attempt.";
+    };
+
+    strictHostKeyChecking = lib.mkOption {
+      type = lib.types.enum [
+        "yes"
+        "accept-new"
+        "no"
+      ];
+      default = "accept-new";
+      description = ''
+        `ssh -o StrictHostKeyChecking` for the probe. "accept-new" is
+        TOFU -- see docs/decisions/0002. `"ask"` is deliberately not an
+        option here (excluded by explicit choice, not a technical
+        requirement -- `BatchMode=yes`, which is always on, would make it
+        fail rather than hang either way).
+      '';
+    };
+
+    probeRetries = lib.mkOption {
+      type = lib.types.int;
+      default = 3;
+      description = "SSH connect attempts per tick before declaring a peer unreachable.";
+    };
+
+    probeRetryDelay = lib.mkOption {
+      type = lib.types.str;
+      default = "1.5";
+      description = "Seconds to sleep between failed attempts (passed straight to `sleep`, fractional values are fine).";
+    };
+
+    niceLevel = lib.mkOption {
+      type = lib.types.int;
+      default = 19;
+      description = "`nice` priority for the receiving side's `nix-store --serve` -- a scheduling courtesy, not a security control.";
+    };
+
+    probeOnBootSec = lib.mkOption {
+      type = lib.types.str;
+      default = "30s";
+      description = ''
+        How soon after boot the first probe tick fires (systemd time span).
+        Global only -- see docs/decisions for why this isn't per-peer.
+      '';
+    };
+
+    probeIntervalSec = lib.mkOption {
+      type = lib.types.str;
+      default = "60s";
+      description = "How often each peer is re-probed after the first tick (systemd time span). Global only.";
+    };
+
     peers = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (
@@ -141,6 +196,35 @@ in
                 type = lib.types.bool;
                 default = cfg.publicKeyWorldReadable;
                 defaultText = lib.literalExpression "config.services.nixDynamicBuilders.publicKeyWorldReadable";
+              };
+              connectTimeout = lib.mkOption {
+                type = lib.types.int;
+                default = cfg.connectTimeout;
+                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.connectTimeout";
+              };
+              strictHostKeyChecking = lib.mkOption {
+                type = lib.types.enum [
+                  "yes"
+                  "accept-new"
+                  "no"
+                ];
+                default = cfg.strictHostKeyChecking;
+                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.strictHostKeyChecking";
+              };
+              probeRetries = lib.mkOption {
+                type = lib.types.int;
+                default = cfg.probeRetries;
+                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.probeRetries";
+              };
+              probeRetryDelay = lib.mkOption {
+                type = lib.types.str;
+                default = cfg.probeRetryDelay;
+                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.probeRetryDelay";
+              };
+              niceLevel = lib.mkOption {
+                type = lib.types.int;
+                default = cfg.niceLevel;
+                defaultText = lib.literalExpression "config.services.nixDynamicBuilders.niceLevel";
               };
             };
           }

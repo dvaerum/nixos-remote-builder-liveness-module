@@ -110,7 +110,8 @@ in
       # command already fully constrains each key regardless of which
       # account it lands on.
       openssh.authorizedKeys.keys = lib.mapAttrsToList (
-        _: peerCfg: ''command="nice -19 nix-store --serve --write",restrict ${peerCfg.publicKey}''
+        _: peerCfg:
+        ''command="nice -${toString peerCfg.niceLevel} nix-store --serve --write",restrict ${peerCfg.publicKey}''
       ) cfg.peers;
     };
 
@@ -165,6 +166,10 @@ in
             "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
             "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
             "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
+            "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
+            "STRICT_HOST_KEY_CHECKING=${peerCfg.strictHostKeyChecking}"
+            "PROBE_RETRIES=${toString peerCfg.probeRetries}"
+            "PROBE_RETRY_DELAY=${peerCfg.probeRetryDelay}"
             "FRAGMENT_FILE=${cfg.runtimeDir}/machines.d/${peerName}"
             "MACHINES_FILE=${cfg.runtimeDir}/machines"
           ];
@@ -178,8 +183,8 @@ in
         description = "Periodic ${peerCfg.hostname} liveness probe for dynamic nix builders";
         wantedBy = [ "timers.target" ];
         timerConfig = {
-          OnBootSec = "30s";
-          OnUnitActiveSec = "60s";
+          OnBootSec = cfg.probeOnBootSec;
+          OnUnitActiveSec = cfg.probeIntervalSec;
         };
       }
     ) cfg.peers;

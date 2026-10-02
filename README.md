@@ -156,6 +156,13 @@ give it here).
 | `services.nixDynamicBuilders.runtimeDir` | path | `/run/nix-dynamic-builders` | Ephemeral (tmpfs) runtime state: the machines file and per-peer fragments |
 | `services.nixDynamicBuilders.sshKey` | `true`\|`false`\|path\|str | *(required)* | Shared default identity key: generate (`true`), disable (`false`), or use this exact pre-existing key |
 | `services.nixDynamicBuilders.publicKeyWorldReadable` | bool | `true` | Whether generated/configured public keys are readable by any local user (so `show-key` just works) or root-only |
+| `services.nixDynamicBuilders.connectTimeout` | int | `2` | Seconds `ssh -o ConnectTimeout` waits per probe attempt |
+| `services.nixDynamicBuilders.strictHostKeyChecking` | `"yes"`\|`"accept-new"`\|`"no"` | `"accept-new"` | TOFU by default -- see docs/decisions/0002 |
+| `services.nixDynamicBuilders.probeRetries` | int | `3` | SSH connect attempts per tick before declaring a peer unreachable |
+| `services.nixDynamicBuilders.probeRetryDelay` | str | `"1.5"` | Seconds between failed attempts (passed straight to `sleep`) |
+| `services.nixDynamicBuilders.niceLevel` | int | `19` | `nice` priority for the receiving side's `nix-store --serve` |
+| `services.nixDynamicBuilders.probeOnBootSec` | str | `"30s"` | Delay before the first probe tick after boot. Global only |
+| `services.nixDynamicBuilders.probeIntervalSec` | str | `"60s"` | How often each peer is re-probed thereafter. Global only |
 | `services.nixDynamicBuilders.peers.<name>.hostname` | str | *(attribute name)* | The peer's hostname, probed and dispatched to |
 | `services.nixDynamicBuilders.peers.<name>.system` | str | `"x86_64-linux"` | The peer's Nix `system` string |
 | `services.nixDynamicBuilders.peers.<name>.maxJobs` | int | *(required)* | The peer's own `maxJobs` for this builder entry |
@@ -165,6 +172,7 @@ give it here).
 | `services.nixDynamicBuilders.peers.<name>.publicKey` | str | *(required)* | The peer's public key, authorized to connect here as `nix-remote-builder` |
 | `services.nixDynamicBuilders.peers.<name>.sshKey` | `false`\|`true`\|path\|str | `false` | Override the shared default: `false` inherits it (erroring if it's disabled), `true` generates a key distinct to this peer, a path/string uses that exact key |
 | `services.nixDynamicBuilders.peers.<name>.publicKeyWorldReadable` | bool | *(inherits `publicKeyWorldReadable`)* | Only meaningful when this peer has its own distinct key (`sshKey` isn't `false`) |
+| `services.nixDynamicBuilders.peers.<name>.{connectTimeout,strictHostKeyChecking,probeRetries,probeRetryDelay,niceLevel}` | *(same as above)* | *(inherits the global value)* | Per-peer override of the matching global option |
 
 `nix-dynamic-builders-show-key <peer-name>|--default|--fzf` prints a
 public key (not secret) for pasting into the other host's `publicKey` --

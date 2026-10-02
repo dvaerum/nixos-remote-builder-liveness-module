@@ -66,6 +66,13 @@ in
         sshKey = true;
         publicKeyWorldReadable = false;
       };
+      # Non-default SSH tunables on just one peer, to prove per-peer
+      # override actually reaches the rendered unit -- carol (unchanged)
+      # is the control case showing the global default still applies.
+      services.nixDynamicBuilders.peers.bob = {
+        connectTimeout = 7;
+        probeRetries = 5;
+      };
     };
     bob = peerConfig [ "alice" ];
     carol = peerConfig [ "alice" ];
@@ -120,5 +127,20 @@ in
     # ...and show-key, run as that same non-root user, fails the same way
     # (no privilege logic of its own -- it's just the file permission).
     alice.fail("su nobody -s /bin/sh -c 'nix-dynamic-builders-show-key selfgen'")
+
+    # Per-peer SSH tunable overrides actually reach the rendered unit...
+    alice.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-bob.service | grep -q CONNECT_TIMEOUT=7"
+    )
+    alice.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-bob.service | grep -q PROBE_RETRIES=5"
+    )
+    # ...while a peer that didn't override still gets the global default.
+    alice.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-carol.service | grep -q CONNECT_TIMEOUT=2"
+    )
+    alice.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-carol.service | grep -q PROBE_RETRIES=3"
+    )
   '';
 }

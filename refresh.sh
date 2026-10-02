@@ -42,7 +42,7 @@ if [ -e "${SSH_KEY_PATH}.pub" ]; then
 fi
 
 reachable=0
-for attempt in 1 2 3; do
+for attempt in $(seq 1 "$PROBE_RETRIES"); do
   # The receiving side's authorized_keys forces its own command (restrict +
   # command=) regardless of what we ask to run here -- "true" is never what
   # actually executes, the real nix-store --serve is, and IT exits non-zero
@@ -57,17 +57,17 @@ for attempt in 1 2 3; do
   ssh \
     -F /dev/null \
     -i "$SSH_KEY_PATH" \
-    -o ConnectTimeout=2 \
+    -o ConnectTimeout="$CONNECT_TIMEOUT" \
     -o BatchMode=yes \
     -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
-    -o StrictHostKeyChecking=accept-new \
+    -o StrictHostKeyChecking="$STRICT_HOST_KEY_CHECKING" \
     "${PEER_USER}@${PEER_HOSTNAME}" true 2>/dev/null || rc=$?
   if [ "$rc" -ne 255 ]; then
     reachable=1
     break
   fi
-  if [ "$attempt" -lt 3 ]; then
-    sleep 1.5
+  if [ "$attempt" -lt "$PROBE_RETRIES" ]; then
+    sleep "$PROBE_RETRY_DELAY"
   fi
 done
 
@@ -87,7 +87,7 @@ if [ "$reachable" = "1" ]; then
   echo "nix-dynamic-builders: ${PEER_HOSTNAME} reachable -- added as a builder"
 else
   : > "$tmp"
-  echo "nix-dynamic-builders: ${PEER_HOSTNAME} unreachable after 3 attempts -- dropped"
+  echo "nix-dynamic-builders: ${PEER_HOSTNAME} unreachable after ${PROBE_RETRIES} attempts -- dropped"
 fi
 
 mv -f "$tmp" "$FRAGMENT_FILE"
