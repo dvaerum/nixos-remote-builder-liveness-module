@@ -70,7 +70,7 @@ in
     };
 
     systemd.tmpfiles.rules = [
-      "d /var/lib/nix-dynamic-builders 0750 root root -"
+      "d ${cfg.baseDir} 0750 root root -"
     ];
 
     systemd.services = lib.mapAttrs' (
@@ -80,6 +80,15 @@ in
         serviceConfig = {
           Type = "oneshot";
           ExecStart = lib.getExe refreshScript;
+          # Shared by every peer's refresh service (same name): systemd
+          # refcounts a RuntimeDirectory used by multiple units, tearing it
+          # down only once none of them reference it. Preserve=yes on top
+          # of that stops it being wiped between THIS unit's own oneshot
+          # ticks too -- without it the machines file (and sibling peers'
+          # fragments) would vanish every time any single peer's tick
+          # completes, not just at reboot.
+          RuntimeDirectory = "nix-dynamic-builders";
+          RuntimeDirectoryPreserve = "yes";
           Environment = [
             "PEER_HOSTNAME=${peerCfg.hostname}"
             "PEER_USER=nix-remote-builder"
@@ -89,8 +98,8 @@ in
             "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
             "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
             "SSH_KEY_PATH=${config.sops.secrets."nix-dynamic-builders/ssh-key".path}"
-            "KNOWN_HOSTS_FILE=/var/lib/nix-dynamic-builders/known_hosts"
-            "MACHINES_FILE=/var/lib/nix-dynamic-builders/machines"
+            "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
+            "MACHINES_FILE=${cfg.runtimeDir}/machines"
           ];
         };
       }
@@ -115,6 +124,6 @@ in
     # this module inherently means "use distributed builds", so this
     # isn't a side effect the consumer needs to separately remember.
     nix.distributedBuilds = true;
-    nix.settings.builders = "@/var/lib/nix-dynamic-builders/machines";
+    nix.settings.builders = "@${cfg.runtimeDir}/machines";
   };
 }

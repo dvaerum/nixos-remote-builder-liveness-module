@@ -78,7 +78,7 @@ in
 
     # Force a tick now instead of waiting out the real 60s timer.
     alice.succeed("systemctl start nix-dynamic-builders-refresh-bob.service")
-    alice.wait_until_succeeds("grep -q bob /var/lib/nix-dynamic-builders/machines")
+    alice.wait_until_succeeds("grep -q bob /run/nix-dynamic-builders/machines")
 
     # Peer goes down -> next tick drops it back to an empty file
     # (silent fall-back-to-local), not a stale stuck entry. Stop the
@@ -86,6 +86,6 @@ in
     # unit under socket activation and usually isn't even loaded.
     bob.succeed("systemctl stop sshd.socket")
     alice.succeed("systemctl start nix-dynamic-builders-refresh-bob.service")
-    alice.wait_until_succeeds("test ! -s /var/lib/nix-dynamic-builders/machines")
+    alice.wait_until_succeeds("test ! -s /run/nix-dynamic-builders/machines")
   '';
 }

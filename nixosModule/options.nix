@@ -1,8 +1,38 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
+let
+  cfg = config.services.nixDynamicBuilders;
+in
 {
   options.services.nixDynamicBuilders = {
     enable = lib.mkEnableOption "dynamic nix remote-builder liveness tracking";
+
+    baseDir = lib.mkOption {
+      type = lib.types.path;
+      default = "/var/lib/nix-dynamic-builders";
+      description = ''
+        Persistent state directory (survives reboot): SSH keys
+        (`ssh-keys/<peer-name>/`, `ssh-keys/_default/`) and `known_hosts`.
+      '';
+    };
+
+    knownHostsFile = lib.mkOption {
+      type = lib.types.path;
+      default = "${cfg.baseDir}/known_hosts";
+      defaultText = lib.literalExpression ''"''${config.services.nixDynamicBuilders.baseDir}/known_hosts"'';
+      description = "TOFU known_hosts file scoped to this mechanism alone -- see docs/decisions/0002.";
+    };
+
+    runtimeDir = lib.mkOption {
+      type = lib.types.path;
+      default = "/run/nix-dynamic-builders";
+      description = ''
+        Ephemeral runtime directory (tmpfs, recreated fresh every boot):
+        the assembled `machines` file nix-daemon reads and each peer's own
+        fragment. Liveness has no meaning across a reboot, so this lives
+        outside `baseDir` on purpose.
+      '';
+    };
 
     peers = lib.mkOption {
       type = lib.types.attrsOf (
