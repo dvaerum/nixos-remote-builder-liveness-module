@@ -17,53 +17,54 @@ instead, silently and automatically.
 ## How it works
 
 Every configured peer gets its own independent timer/service pair, so a
-host with several peers probes each on its own schedule:
+host with several peers probes each on its own schedule. On the
+dispatching host (this host):
 
 ```mermaid
 flowchart TD
-    subgraph dispatch["Dispatching host (this host)"]
-        A["nix-dynamic-builders-refresh-#60;peer#62;.timer<br/>(OnBootSec/OnUnitActiveSec -- global, same for every peer)"]
-        B["nix-dynamic-builders-refresh-#60;peer#62;.service<br/>(oneshot -- stateless each tick, one per peer)"]
-        C{"ssh -i #60;this peer's key#62; -o ConnectTimeout=...<br/>nix-remote-builder@#60;peer#62; true<br/>(up to N attempts, configurable delay apart)"}
-        D["reachable<br/>(ssh exit != 255)"]
-        E["unreachable<br/>(N/N attempts failed)"]
-        F["also query live features:<br/>nix-remote-builder@#60;peer#62; nix-dynamic-builders-query-features"]
-        G["write EMPTY fragment<br/>(no builder for this peer)"]
-        H["write THIS PEER'S OWN fragment:<br/>'ssh-ng://user@host system sshKey maxJobs speedFactor #60;live features#62; ... -'"]
-        I["runtimeDir/machines.d/#60;peer#62;<br/>(write-temp-then-rename)"]
-        J["reassemble every peer's current fragment into ONE file"]
-        K["mv -f tmp -#62; runtimeDir/machines<br/>(atomic rename -- nix-daemon NEVER sees a half-written file)"]
-        L["nix-daemon, on EVERY build<br/>readFile(#34;@runtimeDir/machines#34;)<br/>fresh read, ZERO caching (confirmed: src/libstore/machines.cc)"]
-        M["a peer's line present<br/>--#62; dispatch build over SSH to that peer"]
-        N["no lines at all<br/>--#62; build locally"]
+    A["nix-dynamic-builders-refresh-#60;peer#62;.timer<br/>(OnBootSec/OnUnitActiveSec -- global, same for every peer)"]
+    B["nix-dynamic-builders-refresh-#60;peer#62;.service<br/>(oneshot -- stateless each tick, one per peer)"]
+    C{"ssh -i #60;this peer's key#62; -o ConnectTimeout=...<br/>nix-remote-builder@#60;peer#62; true<br/>(up to N attempts, configurable delay apart)"}
+    D["reachable<br/>(ssh exit != 255)"]
+    E["unreachable<br/>(N/N attempts failed)"]
+    F["also query live features:<br/>nix-remote-builder@#60;peer#62; nix-dynamic-builders-query-features"]
+    G["write EMPTY fragment<br/>(no builder for this peer)"]
+    H["write THIS PEER'S OWN fragment:<br/>'ssh-ng://user@host system sshKey maxJobs speedFactor #60;live features#62; ... -'"]
+    I["runtimeDir/machines.d/#60;peer#62;<br/>(write-temp-then-rename)"]
+    J["reassemble every peer's current fragment into ONE file"]
+    K["mv -f tmp -#62; runtimeDir/machines<br/>(atomic rename -- nix-daemon NEVER sees a half-written file)"]
+    L["nix-daemon, on EVERY build<br/>readFile(#34;@runtimeDir/machines#34;)<br/>fresh read, ZERO caching (confirmed: src/libstore/machines.cc)"]
+    M["a peer's line present<br/>--#62; dispatch build over SSH to that peer"]
+    N["no lines at all<br/>--#62; build locally"]
 
-        A --> B --> C
-        C -->|"reachable"| D
-        C -->|"unreachable, N/N failed"| E
-        D --> F --> H
-        E --> G
-        G --> I
-        H --> I
-        I --> J --> K --> L
-        L --> M
-        L --> N
-    end
+    A --> B --> C
+    C -->|"reachable"| D
+    C -->|"unreachable, N/N failed"| E
+    D --> F --> H
+    E --> G
+    G --> I
+    H --> I
+    I --> J --> K --> L
+    L --> M
+    L --> N
+```
 
-    subgraph receive["Receiving side"]
-        P["services.nixDynamicBuilders.peers.#60;name#62;.publicKey<br/>installed in nix-remote-builder's authorized_keys,<br/>one line per configured peer"]
-        Q["command=#34;nix-dynamic-builders-dispatch #60;nice-level#62; nix-dynamic-builders-query-features#34;,restrict #60;pubkey#62;<br/>-- can NEVER open a shell or run anything else even if the<br/>private half leaks: the forced command always runs regardless<br/>of what the client asks for"]
-        R{"$SSH_ORIGINAL_COMMAND ==<br/>nix-dynamic-builders-query-features ?"}
-        S["nix config show system-features<br/>(the live-feature query)"]
-        T["nice -#60;level#62; nix-store --serve --write<br/>(anything else, including nix-daemon's own real build dispatch)"]
-        U["nix.settings.trusted-users = [ #34;nix-remote-builder#34; ]<br/>-- lets --serve import build inputs without a per-path signature check"]
+A reachable result dispatches the build over SSH to the peer, where a
+forced `authorized_keys` command decides what to actually run:
 
-        P --> Q --> R
-        R -->|"yes"| S
-        R -->|"no, anything else"| T
-        T -.-> U
-    end
+```mermaid
+flowchart TD
+    P["services.nixDynamicBuilders.peers.#60;name#62;.publicKey<br/>installed in nix-remote-builder's authorized_keys,<br/>one line per configured peer"]
+    Q["command=#34;nix-dynamic-builders-dispatch #60;nice-level#62; nix-dynamic-builders-query-features#34;,restrict #60;pubkey#62;<br/>-- can NEVER open a shell or run anything else even if the<br/>private half leaks: the forced command always runs regardless<br/>of what the client asks for"]
+    R{"$SSH_ORIGINAL_COMMAND ==<br/>nix-dynamic-builders-query-features ?"}
+    S["nix config show system-features<br/>(the live-feature query)"]
+    T["nice -#60;level#62; nix-store --serve --write<br/>(anything else, including nix-daemon's own real build dispatch)"]
+    U["nix.settings.trusted-users = [ #34;nix-remote-builder#34; ]<br/>-- lets --serve import build inputs without a per-path signature check"]
 
-    M -.->|"ssh"| Q
+    P --> Q --> R
+    R -->|"yes"| S
+    R -->|"no, anything else"| T
+    T -.-> U
 ```
 
 See [`docs/decisions/0001`](docs/decisions/0001-live-file-over-static-buildmachines.md)
