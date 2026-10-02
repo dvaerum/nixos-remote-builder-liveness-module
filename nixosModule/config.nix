@@ -148,7 +148,6 @@ in
             "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
             "FEATURE_QUERY_COMMAND=${featureQuerySentinel}"
             # Fragment write
-            "PEER_SYSTEM=${peerCfg.system}"
             "PEER_MAX_JOBS=${toString peerCfg.maxJobs}"
             "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
             "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"

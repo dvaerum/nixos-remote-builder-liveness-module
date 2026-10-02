@@ -4,8 +4,8 @@
 # peer's own nix-dynamic-builders-refresh-<peer>.timer -- every tick is
 # fully self-contained (no state persisted between runs): up to three
 # quick SSH connect attempts decide THIS tick's answer, followed by a live
-# supportedFeatures query over the same channel if reachable. Each peer
-# only ever writes its OWN fragment file, never anyone else's -- so
+# system + supportedFeatures query over the same channel if reachable.
+# Each peer only ever writes its OWN fragment file, never anyone else's -- so
 # concurrent per-peer timers can't race each other -- and both the
 # fragment write and the final reassembly go through write-temp-then-
 # rename, so nix-daemon (which re-reads the assembled file fresh on every
@@ -86,13 +86,19 @@ for attempt in $(seq 1 "$PROBE_RETRIES"); do
   fi
 done
 
-# Live supportedFeatures, fetched over the same restricted channel (the
-# dispatcher on the peer answers this one sentinel command distinctly from
-# the real nix-store --serve, see dispatch.sh) -- only worth asking once we
-# already know the peer's reachable this tick, and falls back to the static
-# config value if the query comes back empty for any reason (peer running
-# an older/unpatched dispatcher, transient hiccup, etc.) rather than
-# silently advertising zero features.
+# Live system + supportedFeatures, fetched over the same restricted channel
+# (the dispatcher on the peer answers this one sentinel command distinctly
+# from the real nix-store --serve, see dispatch.sh) -- only worth asking
+# once we already know the peer's reachable this tick. supportedFeatures
+# falls back to its static config value if the query comes back empty
+# (safe either way: under- or over-advertising a feature just changes
+# which builds nix-daemon considers this peer for). system has no such
+# fallback -- see docs/decisions/0006 for why guessing an architecture is
+# categorically riskier than guessing a feature list, so a peer this
+# can't be determined for is treated the same as unreachable below. Two
+# lines, system then supportedFeatures (see dispatch.sh) -- not two SSH
+# round trips, one connection answering with both.
+live_system=""
 live_supported_features="$PEER_SUPPORTED_FEATURES"
 if [ "$reachable" = "1" ]; then
   # shellcheck disable=SC2029 # intentional: resolve locally to the fixed
@@ -100,10 +106,12 @@ if [ "$reachable" = "1" ]; then
   # SEPARATE, remote-side $SSH_ORIGINAL_COMMAND -- not the thing this
   # check warns about (a variable meant to expand on the remote shell).
   raw="$(ssh "${ssh_opts[@]}" "${PEER_USER}@${PEER_HOSTNAME}" "$FEATURE_QUERY_COMMAND" 2>/dev/null || true)"
-  if [ -n "$raw" ]; then
+  live_system="$(printf '%s\n' "$raw" | sed -n '1p')"
+  live_features_line="$(printf '%s\n' "$raw" | sed -n '2p')"
+  if [ -n "$live_features_line" ]; then
     # nix config show prints a space-separated list; the machines-file
     # format wants comma-separated.
-    live_supported_features="$(echo "$raw" | tr ' ' ',')"
+    live_supported_features="$(printf '%s' "$live_features_line" | tr ' ' ',')"
   fi
 fi
 
@@ -111,16 +119,19 @@ fragments_dir="$(dirname "$FRAGMENT_FILE")"
 mkdir -p "$fragments_dir"
 tmp="$(mktemp "${FRAGMENT_FILE}.XXXXXX")"
 
-if [ "$reachable" = "1" ]; then
+if [ "$reachable" = "1" ] && [ -n "$live_system" ]; then
   # storeUri system sshKey maxJobs speedFactor supportedFeatures mandatoryFeatures publicHostKey
   # Host key field is "-": we rely on the pinned known_hosts file above
   # (TOFU via accept-new) rather than pre-pinning a key -- see
   # docs/decisions/0002-tofu-host-key-checking.md.
   printf 'ssh-ng://%s@%s %s %s %s %s %s %s -\n' \
-    "$PEER_USER" "$PEER_HOSTNAME" "$PEER_SYSTEM" "$SSH_KEY_PATH" \
+    "$PEER_USER" "$PEER_HOSTNAME" "$live_system" "$SSH_KEY_PATH" \
     "$PEER_MAX_JOBS" "$PEER_SPEED_FACTOR" "$live_supported_features" "$PEER_MANDATORY_FEATURES" \
     > "$tmp"
   echo "nix-dynamic-builders: ${PEER_HOSTNAME} reachable -- added as a builder"
+elif [ "$reachable" = "1" ]; then
+  : > "$tmp"
+  echo "nix-dynamic-builders: ${PEER_HOSTNAME} reachable but couldn't determine its system -- dropped"
 else
   : > "$tmp"
   echo "nix-dynamic-builders: ${PEER_HOSTNAME} unreachable after ${PROBE_RETRIES} attempts -- dropped"

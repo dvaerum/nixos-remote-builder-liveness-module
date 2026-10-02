@@ -170,8 +170,9 @@ in
 
     # heterogeneous-fleet.nix: every option that differs from this module's
     # own defaults actually reaches the rendered unit -- hostname (by IP,
-    # not the attribute name), system, speedFactor, maxJobs,
-    # supportedFeatures, and mandatoryFeatures. None of these were
+    # not the attribute name), speedFactor, maxJobs, supportedFeatures, and
+    # mandatoryFeatures (system is entirely live-fetched, no static option
+    # exists for it -- see docs/decisions/0006). None of these were
     # previously exercised by any example (only by liveness.nix's
     # hostname="localhost" and publicKeyWorldReadable=false per-peer
     # cases), so a rename/removal of any of them would otherwise only
@@ -179,10 +180,6 @@ in
     heterogeneousFleet.succeed(
         "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
         "grep -q PEER_HOSTNAME=10.0.0.50"
-    )
-    heterogeneousFleet.succeed(
-        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
-        "grep -q PEER_SYSTEM=aarch64-linux"
     )
     heterogeneousFleet.succeed(
         "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "

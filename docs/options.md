@@ -655,30 +655,6 @@ list of string
 
 
 
-## services\.nixDynamicBuilders\.peers\.\<name>\.system
-
-
-
-The peer’s Nix ` system ` string, as it appears in the machines-file line\.
-
-
-
-*Type:*
-string
-
-
-
-*Default:*
-
-```nix
-"x86_64-linux"
-```
-
-*Declared by:*
- - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
-
-
-
 ## services\.nixDynamicBuilders\.probeIntervalSec
 
 

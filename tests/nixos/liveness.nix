@@ -112,6 +112,10 @@ in
         "big-parallel"
         "nix-dynamic-builders-test-marker"
       ];
+      # Same proof, for `system`: a distinctive value not present in
+      # alice's static peers.bob.system default ("x86_64-linux"), to
+      # prove alice's assembled machines file picks this up live too.
+      nix.settings.system = "nix-dynamic-builders-test-marker-system";
     };
     carol = peerConfig [ "alice" ];
 
@@ -168,6 +172,11 @@ in
     # marker alice's peers.bob.supportedFeatures never mentions, and it
     # shows up in the assembled file anyway.
     alice.succeed("grep -q nix-dynamic-builders-test-marker /run/nix-dynamic-builders/machines")
+
+    # system is live-fetched the same way -- bob's real nix.settings.system
+    # includes a marker alice's peers.bob.system (default "x86_64-linux")
+    # never mentions, and it shows up in the assembled file anyway.
+    alice.succeed("grep -q nix-dynamic-builders-test-marker-system /run/nix-dynamic-builders/machines")
 
     # bob goes down -> next tick drops ONLY bob's line (silent fall-back-to-
     # local for that one direction), carol's fragment is untouched. Stop

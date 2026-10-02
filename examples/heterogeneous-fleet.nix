@@ -16,8 +16,12 @@
     peers.arm-builder = {
       # Reached by IP, not DNS -- the attribute name above is just this
       # host's own label for it, unrelated to how it's actually reached.
+      # Its real architecture (aarch64-linux) isn't configured anywhere here
+      # at all -- system is entirely live-fetched, no static option exists
+      # for it (see docs/decisions/0006): a peer this can't be determined
+      # for gets dropped the same as an unreachable one, rather than this
+      # host ever guessing (and potentially guessing wrong).
       hostname = "10.0.0.50";
-      system = "aarch64-linux";
       maxJobs = 4;
       speedFactor = 2; # genuinely faster than this fleet's other peers
       # Fallback only (live-fetched normally, see services.nixDynamicBuilders.peers's

@@ -159,11 +159,6 @@ in
                   you choose to call it here.
                 '';
               };
-              system = lib.mkOption {
-                type = lib.types.str;
-                default = "x86_64-linux";
-                description = "The peer's Nix `system` string, as it appears in the machines-file line.";
-              };
               maxJobs = lib.mkOption {
                 type = lib.types.int;
                 description = ''
