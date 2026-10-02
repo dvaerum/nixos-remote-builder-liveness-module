@@ -134,6 +134,11 @@ in
       # peer -- all mapping to this same shared account, since the forced
       # command already fully constrains each key regardless of which
       # account it lands on.
+      # dispatchScript's positional contract: $1 = niceLevel, $2 =
+      # featureQuerySentinel -- order matters (see dispatch.sh's own
+      # `nice_level="$1"; feature_query_command="$2"`); a reorder here
+      # without a matching reorder there wouldn't fail loudly, it would
+      # just make the feature-query branch permanently unreachable.
       openssh.authorizedKeys.keys = lib.mapAttrsToList (
         _: peerCfg:
         ''command="${lib.getExe dispatchScript} ${toString peerCfg.niceLevel} ${featureQuerySentinel}",restrict ${peerCfg.publicKey}''
