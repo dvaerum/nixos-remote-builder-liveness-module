@@ -22,7 +22,7 @@ language toolchain, nothing to version-pin beyond the flake itself.
 ## Project structure
 
 ```
-flake.nix          nixosModules.default + checks.<system>.{liveness,examples}
+flake.nix          nixosModules.default + checks.<system>.{liveness,examples,optionsDocUpToDate}
 nixosModule/        options.nix (services.nixDynamicBuilders.*), config.nix (the actual
                     systemd units/users/nix.settings wiring), default.nix (glue)
 refresh.sh          the liveness-probe script, one instance per configured

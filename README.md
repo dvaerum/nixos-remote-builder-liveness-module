@@ -77,7 +77,7 @@ host with several peers probes each on its own schedule:
    installed in nix-remote-builder's authorized_keys with a forced prefix,
    one line per configured peer:
 
-       command="nix-dynamic-builders-dispatch <nice-level>",restrict  <pubkey>
+       command="nix-dynamic-builders-dispatch <nice-level> nix-dynamic-builders-query-features",restrict  <pubkey>
 
    -> this key can NEVER open a shell or run anything else, even if the
       private half leaks -- the forced command always runs regardless
