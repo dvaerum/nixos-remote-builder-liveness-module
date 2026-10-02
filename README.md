@@ -182,9 +182,10 @@ for the full option reference, or `nixosModule/options.nix` and
 `nixosModule/userOptions.nix` directly. See [`examples/`](examples/) for
 a working, tested set of scenarios (a single peer, two independent peers,
 a pre-existing keypair instead of self-generation, tuning the probe
-itself, and a receive-only build-serving box) -- each one is exercised by
-`tests/nixos/examples.nix`, so a renamed/removed option breaks CI, not
-just the docs.
+itself, a receive-only build-serving box, and a heterogeneous fleet with
+a differently-addressed, differently-architected peer) -- each one is
+exercised by `tests/nixos/examples.nix`, so a renamed/removed option
+breaks CI, not just the docs.
 
 `nix-dynamic-builders-show-key <peer-name>|--default|--fzf` prints a
 public key (not secret) for pasting into the other host's

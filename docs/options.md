@@ -347,6 +347,18 @@ attribute set of (submodule)
 { }
 ```
 
+
+
+*Example:*
+
+```nix
+{
+  workstation.maxJobs = 8;
+  laptop.maxJobs = 4;
+}
+
+```
+
 *Declared by:*
  - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
 
@@ -425,6 +437,14 @@ list of string
 
 ```nix
 [ ]
+```
+
+
+
+*Example:*
+
+```nix
+[ "aarch64-only-build" ]
 ```
 
 *Declared by:*
@@ -829,6 +849,14 @@ its own ` peers.<name>.sshKey `:
 
 *Type:*
 boolean or absolute path or string
+
+
+
+*Example:*
+
+```nix
+config.sops.secrets."nix-dynamic-builders-key".path
+```
 
 *Declared by:*
  - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)

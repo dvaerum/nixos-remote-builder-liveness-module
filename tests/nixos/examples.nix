@@ -45,6 +45,12 @@ in
         examples.receiveOnly
       ];
     };
+    heterogeneousFleet = {
+      imports = [
+        nixosModule.nixosModules.default
+        examples.heterogeneousFleet
+      ];
+    };
   };
 
   testScript = ''
@@ -161,5 +167,45 @@ in
     receiveOnly.succeed("id nix-remote-builder")
     receiveOnly.succeed("grep -q restrict /etc/ssh/authorized_keys.d/nix-remote-builder")
     receiveOnly.fail("command -v nix-dynamic-builders-show-key")
+
+    # heterogeneous-fleet.nix: every option that differs from this module's
+    # own defaults actually reaches the rendered unit -- hostname (by IP,
+    # not the attribute name), system, speedFactor, maxJobs,
+    # supportedFeatures, and mandatoryFeatures. None of these were
+    # previously exercised by any example (only by liveness.nix's
+    # hostname="localhost" and publicKeyWorldReadable=false per-peer
+    # cases), so a rename/removal of any of them would otherwise only
+    # fail through that one deep test, not here too.
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PEER_HOSTNAME=10.0.0.50"
+    )
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PEER_SYSTEM=aarch64-linux"
+    )
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PEER_SPEED_FACTOR=2"
+    )
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PEER_MAX_JOBS=4"
+    )
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PEER_SUPPORTED_FEATURES=big-parallel"
+    )
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PEER_MANDATORY_FEATURES=aarch64-only-build"
+    )
+    # publicKeyWorldReadable = false set GLOBALLY (not per-peer, which
+    # liveness.nix's selfgen peer already covers) still reaches a peer
+    # that doesn't override it.
+    heterogeneousFleet.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
+        "grep -q PUBLIC_KEY_MODE=0600"
+    )
   '';
 }

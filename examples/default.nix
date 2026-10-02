@@ -9,4 +9,5 @@
   explicitKey = ./explicit-key.nix;
   customProbeTuning = ./custom-probe-tuning.nix;
   receiveOnly = ./receive-only.nix;
+  heterogeneousFleet = ./heterogeneous-fleet.nix;
 }

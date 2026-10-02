@@ -67,6 +67,7 @@ in
       type = lib.types.either lib.types.bool (lib.types.either lib.types.path lib.types.str);
       # Deliberately no default -- every install must pick one of the three
       # meanings below, rather than silently inheriting "generate one".
+      example = lib.literalExpression ''config.sops.secrets."nix-dynamic-builders-key".path'';
       description = ''
         The shared default identity key used by any peer that doesn't set
         its own `peers.<name>.sshKey`:
@@ -193,6 +194,7 @@ in
               mandatoryFeatures = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
+                example = lib.literalExpression ''[ "aarch64-only-build" ]'';
                 description = ''
                   Features a build must explicitly request before this peer
                   is even considered for it -- this host's own dispatching
@@ -230,6 +232,12 @@ in
         )
       );
       default = { };
+      example = lib.literalExpression ''
+        {
+          workstation.maxJobs = 8;
+          laptop.maxJobs = 4;
+        }
+      '';
       description = ''
         The set of peer machines this host probes and may dispatch builds
         to, keyed by an arbitrary name of your choosing (used in unit
