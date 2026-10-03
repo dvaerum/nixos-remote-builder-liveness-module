@@ -90,3 +90,8 @@ the fix applied, regardless of the unrelated `chown` wall past it
 (genuine GREEN). Asserting that string's absence is precisely the
 regression this ADR fixes, without depending on this environment's one
 remaining, unrelated, already-accepted limitation.
+
+See
+[`docs/learnings/real-build-round-trip-test.md`](../learnings/real-build-round-trip-test.md)
+for what was tried to close that remaining gap (a real completed
+build, not just the protocol handshake) and why it's not there yet.
