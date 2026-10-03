@@ -95,8 +95,14 @@ fi
 
 # Shared by both ssh calls below (liveness probe + features query) -- same
 # connection policy either way, no reason to duplicate the flag list.
+# SSH_CONFIG_FILE (not /dev/null) so a peer's extraSshConfig (a jump host,
+# say) applies here too, not just to nix-daemon's own real dispatch -- see
+# docs/decisions/0010. -i is kept alongside its matching IdentityFile line
+# in that same file as a belt-and-suspenders default for the DIRECT
+# connection; it's the file's own Host block, not this flag, that a
+# ProxyJump's re-invoked sub-ssh process actually sees.
 ssh_opts=(
-  -F /dev/null
+  -F "$SSH_CONFIG_FILE"
   -i "$SSH_KEY_PATH"
   -o ConnectTimeout="$CONNECT_TIMEOUT"
   -o BatchMode=yes

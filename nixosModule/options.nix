@@ -225,6 +225,22 @@ in
               strictHostKeyChecking = mkPeerOverride "strictHostKeyChecking" { };
               probeRetries = mkPeerOverride "probeRetries" { };
               probeRetryDelay = mkPeerOverride "probeRetryDelay" { };
+              extraSshConfig = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                example = lib.literalExpression ''[ "ProxyJump bastion.example.com" ]'';
+                description = ''
+                  Extra `ssh_config(5)` lines for THIS peer only (e.g. a jump
+                  host some peers need and others don't) -- `NIX_SSHOPTS` has
+                  no per-machine equivalent (see `docs/decisions/0010`), so
+                  these are rendered into a `Host ${name}` block in one
+                  shared config file both the probe and `nix-daemon`'s real
+                  build dispatch read via `-F`, instead. No per-peer
+                  override needed here: unlike the options above, a jump
+                  host is inherently a fact about one specific peer, never a
+                  sensible fleet-wide default.
+                '';
+              };
             };
           }
         )

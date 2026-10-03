@@ -130,6 +130,17 @@ in
         maxJobs = 1;
         sshKey = sshKeyNoSiblingPath;
       };
+      # A sixth peer whose OWN configured hostname deliberately doesn't
+      # resolve to anything -- extraSshConfig's "Hostname carol" directive
+      # is the ONLY thing that can make this connection ever succeed,
+      # which is exactly what proves the rendered ssh_config file is
+      # genuinely read by the probe's own ssh invocation, not just
+      # correctly rendered and never consulted. See docs/decisions/0010.
+      services.nixDynamicBuilders.peers.proxied = {
+        hostname = "nix-dynamic-builders-test-unresolvable";
+        maxJobs = 1;
+        extraSshConfig = [ "Hostname carol" ];
+      };
     };
     bob = {
       imports = [ (peerConfig [ "alice" ]) ];
@@ -234,10 +245,29 @@ in
     # What's checked instead: the fix is actually wired into the
     # rendered nix-daemon unit (catches a future accidental removal or
     # typo) -- not a substitute for the full proof, just the honest
-    # floor this environment allows.
+    # floor this environment allows. `-F /nix/store/...-ssh-config` is
+    # the same shared file wired in for docs/decisions/0010 (per-peer
+    # jump hosts) -- not matched by exact store path, which depends on
+    # content hashing.
     alice.succeed(
-        "systemctl cat nix-daemon.service | grep -q "
-        "'NIX_SSHOPTS=-o UserKnownHostsFile=/var/lib/nix-dynamic-builders/known_hosts -o StrictHostKeyChecking=accept-new'"
+        "systemctl cat nix-daemon.service | grep -qE "
+        "'NIX_SSHOPTS=-F /nix/store/\\S+-nix-dynamic-builders-ssh-config "
+        "-o UserKnownHostsFile=/var/lib/nix-dynamic-builders/known_hosts "
+        "-o StrictHostKeyChecking=accept-new'"
+    )
+
+    # docs/decisions/0010: "proxied"'s own configured hostname
+    # ("nix-dynamic-builders-test-unresolvable") resolves to nothing --
+    # its extraSshConfig's "Hostname carol" is the ONLY way this
+    # connection can ever succeed, which is exactly what proves the
+    # rendered ssh_config file is genuinely read by the probe's own ssh
+    # invocation (-F), not just correctly rendered and never consulted.
+    # The marker that lands in the assembled file is the CONFIGURED
+    # hostname, not the real one it's secretly redirected to -- see
+    # refresh.sh's own fragment-write line.
+    alice.succeed("systemctl start nix-dynamic-builders-refresh-proxied.service")
+    alice.wait_until_succeeds(
+        "grep -q nix-dynamic-builders-test-unresolvable /run/nix-dynamic-builders/machines"
     )
 
     # alice dispatches TO dan even though dan never enabled

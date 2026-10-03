@@ -90,7 +90,11 @@ for why a reachable peer doesn't by itself guarantee a real build can
 reach it, and
 [`docs/decisions/0009`](docs/decisions/0009-dispatching-side-runs-unprivileged.md)
 for why the dispatching side runs as a dedicated, unprivileged user
-rather than root.
+rather than root, and
+[`docs/decisions/0010`](docs/decisions/0010-per-peer-ssh-config.md) for
+how a peer-specific jump host (`peers.<name>.extraSshConfig`, see
+[`examples/jump-host.nix`](examples/jump-host.nix)) works despite
+`NIX_SSHOPTS` being daemon-wide.
 
 ## Setup
 

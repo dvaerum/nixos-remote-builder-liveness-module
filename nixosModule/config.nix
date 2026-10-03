@@ -88,6 +88,30 @@ let
     )
   );
 
+  # One shared ssh_config(5) file, one `Host` block per peer -- NIX_SSHOPTS
+  # has no per-machine field at all (see docs/decisions/0010), so per-peer
+  # SSH behaviour (a jump host for one peer but not another) has to live
+  # here instead, read via `-F` by both nix-daemon's real build dispatch
+  # and the probe's own connection, scoped automatically by ssh's own
+  # Host-pattern matching against each peer's hostname. IdentityFile is
+  # set here too (not just passed as `-i` on the probe's own command
+  # line) because a ProxyJump hop re-invokes ssh as a separate process
+  # against the SAME `-F` file -- that nested invocation never sees the
+  # outer process's `-i` flag, only what this file itself says.
+  sshConfigBlock =
+    peerName: peerCfg:
+    lib.concatStringsSep "\n" (
+      [
+        "Host ${peerCfg.hostname}"
+        "  IdentityFile ${resolveSshKeyPath peerName peerCfg.sshKey}"
+      ]
+      ++ map (line: "  ${line}") peerCfg.extraSshConfig
+    );
+
+  sshConfigFile = pkgs.writeText "nix-dynamic-builders-ssh-config" (
+    lib.concatStringsSep "\n\n" (lib.mapAttrsToList sshConfigBlock cfg.peers)
+  );
+
   refreshScript = pkgs.writeShellApplication {
     name = "nix-dynamic-builders-refresh";
     runtimeInputs = [
@@ -183,6 +207,7 @@ in
               "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
               "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
               "STRICT_HOST_KEY_CHECKING=${peerCfg.strictHostKeyChecking}"
+              "SSH_CONFIG_FILE=${sshConfigFile}"
               # Probe loop
               "PEER_USER=nix-remote-builder"
               "PEER_HOSTNAME=${peerCfg.hostname}"
@@ -228,7 +253,12 @@ in
         # lives alongside the per-peer refresh units here rather than
         # inside the mapAttrs' above: Nix has no per-machine ssh-options
         # field at all, so this is the only lever available regardless.
-        nix-daemon.environment.NIX_SSHOPTS = "-o UserKnownHostsFile=${cfg.knownHostsFile} -o StrictHostKeyChecking=accept-new";
+        #
+        # `-F sshConfigFile` comes first so the per-peer `-o`s after it
+        # (CLI options) still win over anything with the same name inside
+        # that file, same precedence ssh itself already guarantees between
+        # command-line and config-file options.
+        nix-daemon.environment.NIX_SSHOPTS = "-F ${sshConfigFile} -o UserKnownHostsFile=${cfg.knownHostsFile} -o StrictHostKeyChecking=accept-new";
       };
 
     systemd.timers = lib.mapAttrs' (

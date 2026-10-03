@@ -392,6 +392,46 @@ config.services.nixDynamicBuilders.connectTimeout
 
 
 
+## services\.nixDynamicBuilders\.peers\.\<name>\.extraSshConfig
+
+
+
+Extra ` ssh_config(5) ` lines for THIS peer only (e\.g\. a jump
+host some peers need and others don’t) – ` NIX_SSHOPTS ` has
+no per-machine equivalent (see ` docs/decisions/0010 `), so
+these are rendered into a ` Host ‹name› ` block in one
+shared config file both the probe and ` nix-daemon `’s real
+build dispatch read via ` -F `, instead\. No per-peer
+override needed here: unlike the options above, a jump
+host is inherently a fact about one specific peer, never a
+sensible fleet-wide default\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[ "ProxyJump bastion.example.com" ]
+```
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
+
+
+
 ## services\.nixDynamicBuilders\.peers\.\<name>\.hostname
 
 

@@ -51,6 +51,12 @@ in
         examples.heterogeneousFleet
       ];
     };
+    jumpHost = {
+      imports = [
+        nixosModule.nixosModules.default
+        examples.jumpHost
+      ];
+    };
   };
 
   testScript = ''
@@ -215,5 +221,17 @@ in
         "systemctl cat nix-dynamic-builders-refresh-arm-builder.service | "
         "grep -q PUBLIC_KEY_MODE=0600"
     )
+
+    # jump-host.nix: extraSshConfig's ProxyJump line lands in secure-site's
+    # OWN Host block in the rendered shared ssh_config file -- the actual
+    # proof is behavioral (tests/nixos/liveness.nix's "proxied" peer), this
+    # is just the lighter rendered-file floor matching every other example
+    # here. See docs/decisions/0010.
+    ssh_config_path = jumpHost.succeed(
+        "systemctl cat nix-dynamic-builders-refresh-secure-site.service | "
+        "grep -oE '/nix/store/\\S+-nix-dynamic-builders-ssh-config'"
+    ).strip()
+    jumpHost.succeed(f"grep -q 'Host 10.0.1.50' {ssh_config_path}")
+    jumpHost.succeed(f"grep -q 'ProxyJump bastion.example.com' {ssh_config_path}")
   '';
 }

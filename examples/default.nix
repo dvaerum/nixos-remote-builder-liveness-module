@@ -10,4 +10,5 @@
   customProbeTuning = ./custom-probe-tuning.nix;
   receiveOnly = ./receive-only.nix;
   heterogeneousFleet = ./heterogeneous-fleet.nix;
+  jumpHost = ./jump-host.nix;
 }
