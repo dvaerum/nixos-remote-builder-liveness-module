@@ -297,9 +297,13 @@ in
     # must still derive and serve the correct public key from
     # PUBLIC_KEY_PATH (docs/decisions/0007), not just skip it; show-key
     # itself never touches the private key at all, only ever reading
-    # whatever refresh.sh already served.
+    # whatever refresh.sh already served. Owned by nix-dynamic-builders,
+    # same as a real deploy needs its sops-nix secret's own `owner` set
+    # (see README) -- the refresh service reads this as that user, not
+    # root.
     alice.succeed(
-        "install -D -m 600 ${testSshKey} /run/nix-dynamic-builders-test/nopub-key"
+        "install -D -m 600 -o nix-dynamic-builders -g nix-dynamic-builders "
+        "${testSshKey} /run/nix-dynamic-builders-test/nopub-key"
     )
     alice.succeed("test ! -e /run/nix-dynamic-builders-test/nopub-key.pub")
     # The tick itself doesn't need to succeed (nothing trusts this

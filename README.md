@@ -87,7 +87,10 @@ for why `show-key` serves public keys from `runtimeDir` rather than
 `baseDir`, and
 [`docs/decisions/0008`](docs/decisions/0008-shared-ssh-trust-for-real-dispatch.md)
 for why a reachable peer doesn't by itself guarantee a real build can
-reach it.
+reach it, and
+[`docs/decisions/0009`](docs/decisions/0009-dispatching-side-runs-unprivileged.md)
+for why the dispatching side runs as a dedicated, unprivileged user
+rather than root.
 
 ## Setup
 
@@ -162,7 +165,11 @@ directly:
 ```nix
 # host A's configuration -- private key decrypted by sops-nix at
 # activation (never touches the Nix store); public key pasted directly
-# since it isn't secret.
+# since it isn't secret. sops-nix defaults a secret's owner to root, but
+# the service reading this one runs as the dedicated, unprivileged
+# nix-dynamic-builders user instead (see docs/decisions/0009) -- without
+# this line it would decrypt to a file that user can't read.
+sops.secrets."nix-dynamic-builders-key".owner = "nix-dynamic-builders";
 services.nixDynamicBuilders = {
   enable = true;
   sshKey = config.sops.secrets."nix-dynamic-builders-key".path;

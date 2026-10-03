@@ -125,13 +125,27 @@ in
     environment.systemPackages = [ showKeyScript ];
 
     # ── dispatching side: what THIS host uses to reach the peer ─────────
-    # 0700: private key material only lives under baseDir, never a public
-    # key (those are served from runtimeDir instead, see runtimePubKeyPath
-    # above) -- nothing here needs any non-root access at all, so there's
-    # no traversal exception to carve out.
+    # A dedicated, unprivileged system user -- nothing this side does
+    # (ssh-keygen into baseDir, writing the fragment/machines files under
+    # runtimeDir, running the ssh client itself) needs root. Running as
+    # root here was a plain oversight (no User= set, systemd's own
+    # default filled in root), not a real requirement -- unlike
+    # nix-daemon's own root requirement, which IS intrinsic to Nix's
+    # architecture (store management, build-sandbox setup), this
+    # dispatching side has no such need, so it doesn't get root.
+    users.groups.nix-dynamic-builders = { };
+    users.users.nix-dynamic-builders = {
+      isSystemUser = true;
+      group = "nix-dynamic-builders";
+      description = "Dispatches builds to nix-dynamic-builders peers";
+    };
+
+    # 0700, owned by that dedicated user, not root: private key material
+    # only lives under baseDir, never a public key (those are served
+    # from runtimeDir instead, see runtimePubKeyPath above).
     systemd.tmpfiles.rules = [
-      "d ${cfg.baseDir} 0700 root root -"
-      "d ${cfg.baseDir}/ssh-keys 0700 root root -"
+      "d ${cfg.baseDir} 0700 nix-dynamic-builders nix-dynamic-builders -"
+      "d ${cfg.baseDir}/ssh-keys 0700 nix-dynamic-builders nix-dynamic-builders -"
     ];
 
     systemd.services =
@@ -142,6 +156,8 @@ in
           serviceConfig = {
             Type = "oneshot";
             ExecStart = lib.getExe refreshScript;
+            User = "nix-dynamic-builders";
+            Group = "nix-dynamic-builders";
             # Shared by every peer's refresh service (same name): systemd
             # refcounts a RuntimeDirectory used by multiple units, tearing it
             # down only once none of them reference it. Preserve=yes on top

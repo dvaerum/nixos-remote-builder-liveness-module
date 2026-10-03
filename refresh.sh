@@ -37,8 +37,9 @@ if [ ! -e "$SSH_KEY_PATH" ]; then
   scratch="$(mktemp -d "${keys_parent}/.tmp.XXXXXX")"
   ssh-keygen -q -t ed25519 -N "" -f "$scratch/$key_name" < /dev/null
   # 0700, not world-traversable: baseDir holds private key material only
-  # now, nothing here needs non-root access at all (the public half is
-  # served from a separate, ephemeral location below instead).
+  # now, readable by nothing but the dedicated nix-dynamic-builders user
+  # (the public half is served from a separate, ephemeral location below
+  # instead).
   chmod 0700 "$scratch"
   if mv -T "$scratch" "$key_dir" 2>/dev/null; then
     echo "nix-dynamic-builders: generated a new SSH identity at ${SSH_KEY_PATH}"
@@ -49,9 +50,10 @@ fi
 
 # Serve the current public key from PUBLIC_KEY_PATH (under runtimeDir,
 # ephemeral, non-secret) rather than directly out of baseDir -- baseDir
-# stays private-key-only and fully root-only (0700), so
-# nix-dynamic-builders-show-key never needs any access to it at all (see
-# docs/decisions/0007). Re-derived every tick (cheap: a cat of an
+# stays private-key-only, readable by nothing but the dedicated
+# nix-dynamic-builders user (0700), so nix-dynamic-builders-show-key
+# never needs any access to it at all (see docs/decisions/0007).
+# Re-derived every tick (cheap: a cat of an
 # existing sibling, or one local ssh-keygen -y call) so toggling
 # publicKeyWorldReadable, or a later-placed admin .pub sibling, takes
 # effect on the next tick rather than only at first generation.
@@ -66,9 +68,14 @@ if [ -e "${SSH_KEY_PATH}.pub" ] || [ -e "$SSH_KEY_PATH" ]; then
     # nothing placed next to it (a sops-nix-decrypted secret, say: sops
     # manages the private half alone, since the public half isn't a
     # secret worth deploying that way), not just a key that hasn't been
-    # self-generated yet. Derive it directly -- this runs as root, which
-    # already has legitimate read access to SSH_KEY_PATH anyway (it's
-    # used for the real ssh connection below regardless).
+    # self-generated yet. Derive it directly -- this runs as the
+    # dedicated nix-dynamic-builders user (not root), which already
+    # needs real read access to SSH_KEY_PATH anyway (it's used for the
+    # real ssh connection below regardless) -- for a self-generated key
+    # that's automatic (this same user created it); for an admin-supplied
+    # key, making it readable by this specific user is the admin's own
+    # responsibility (e.g. a sops-nix secret's own `owner` setting), same
+    # as protecting it at all already is.
     ssh-keygen -y -f "$SSH_KEY_PATH" > "$pubkey_tmp"
   fi
   chmod "$PUBLIC_KEY_MODE" "$pubkey_tmp"

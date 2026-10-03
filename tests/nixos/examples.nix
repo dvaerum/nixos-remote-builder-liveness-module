@@ -92,6 +92,11 @@ in
         "systemctl cat nix-dynamic-builders-refresh-workstation.service | grep '^ExecStart='"
     ).strip().split("=", 1)[1]
 
+    # Run as the same dedicated nix-dynamic-builders user the real service
+    # runs as (not root, which this whole script otherwise executes as) --
+    # the committed key_dir must end up with the same ownership a real tick
+    # produces, or the later real "systemctl start ...workstation.service"
+    # below can't traverse back into it (0700, owned by that user).
     multiPeer.succeed(f"""
         set -e
         key_dir=/var/lib/nix-dynamic-builders/ssh-keys/_default
@@ -100,10 +105,10 @@ in
           rm -rf "$key_dir"
           rm -f /tmp/race_start_a /tmp/race_end_a /tmp/race_start_b /tmp/race_end_b
           ( date +%s%N > /tmp/race_start_a
-            SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true
+            su nix-dynamic-builders -s /bin/sh -c "SSH_KEY_PATH='$key_dir/ssh_key' PUBLIC_KEY_MODE=0644 {refresh_bin}" || true
             date +%s%N > /tmp/race_end_a ) &
           ( date +%s%N > /tmp/race_start_b
-            SSH_KEY_PATH="$key_dir/ssh_key" PUBLIC_KEY_MODE=0644 {refresh_bin} || true
+            su nix-dynamic-builders -s /bin/sh -c "SSH_KEY_PATH='$key_dir/ssh_key' PUBLIC_KEY_MODE=0644 {refresh_bin}" || true
             date +%s%N > /tmp/race_end_b ) &
           wait
           sa=$(cat /tmp/race_start_a); ea=$(cat /tmp/race_end_a)
