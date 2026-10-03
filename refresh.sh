@@ -36,21 +36,55 @@ if [ ! -e "$SSH_KEY_PATH" ]; then
   mkdir -p "$keys_parent"
   scratch="$(mktemp -d "${keys_parent}/.tmp.XXXXXX")"
   ssh-keygen -q -t ed25519 -N "" -f "$scratch/$key_name" < /dev/null
-  chmod 0711 "$scratch"
+  # 0700, not world-traversable: baseDir holds private key material only
+  # now, nothing here needs non-root access at all (the public half is
+  # served from a separate, ephemeral location below instead).
+  chmod 0700 "$scratch"
   if mv -T "$scratch" "$key_dir" 2>/dev/null; then
     echo "nix-dynamic-builders: generated a new SSH identity at ${SSH_KEY_PATH}"
   else
     rm -rf "$scratch"
   fi
 fi
-# The private half is never touched beyond generation (root-only via
-# ssh-keygen's own default; an admin-provided key is the admin's own
-# responsibility to protect) -- but the public half's access policy is
-# re-applied every tick, so toggling publicKeyWorldReadable later takes
+
+# Serve the current public key from PUBLIC_KEY_PATH (under runtimeDir,
+# ephemeral, non-secret) rather than directly out of baseDir -- baseDir
+# stays private-key-only and fully root-only (0700), so
+# nix-dynamic-builders-show-key never needs any access to it at all (see
+# docs/decisions/0007). Re-derived every tick (cheap: a cat of an
+# existing sibling, or one local ssh-keygen -y call) so toggling
+# publicKeyWorldReadable, or a later-placed admin .pub sibling, takes
 # effect on the next tick rather than only at first generation.
-if [ -e "${SSH_KEY_PATH}.pub" ]; then
-  chmod "$PUBLIC_KEY_MODE" "${SSH_KEY_PATH}.pub"
+mkdir -p "$(dirname "$PUBLIC_KEY_PATH")"
+chmod 0755 "$(dirname "$PUBLIC_KEY_PATH")"
+if [ -e "${SSH_KEY_PATH}.pub" ] || [ -e "$SSH_KEY_PATH" ]; then
+  pubkey_tmp="$(mktemp "${PUBLIC_KEY_PATH}.XXXXXX")"
+  if [ -e "${SSH_KEY_PATH}.pub" ]; then
+    cat "${SSH_KEY_PATH}.pub" > "$pubkey_tmp"
+  else
+    # No natural .pub sibling -- true for any admin-supplied key with
+    # nothing placed next to it (a sops-nix-decrypted secret, say: sops
+    # manages the private half alone, since the public half isn't a
+    # secret worth deploying that way), not just a key that hasn't been
+    # self-generated yet. Derive it directly -- this runs as root, which
+    # already has legitimate read access to SSH_KEY_PATH anyway (it's
+    # used for the real ssh connection below regardless).
+    ssh-keygen -y -f "$SSH_KEY_PATH" > "$pubkey_tmp"
+  fi
+  chmod "$PUBLIC_KEY_MODE" "$pubkey_tmp"
+  # Atomic rename, not a plain overwrite -- PUBLIC_KEY_PATH can be the
+  # SAME shared "_default" file several peers' concurrent ticks all
+  # write to (any peer inheriting the shared default key resolves to it,
+  # see resolvePublicKeyPath in config.nix), the same concurrency class
+  # the private key's own generation above already guards against; a
+  # reader (show-key) must never see a half-written file either way.
+  mv -f "$pubkey_tmp" "$PUBLIC_KEY_PATH"
 fi
+# else: SSH_KEY_PATH doesn't even exist yet (an admin key not yet
+# provisioned, say) -- nothing to serve this tick. The probe loop below
+# already handles that gracefully as "unreachable", no need to hard-fail
+# here too; any previously-served key from an earlier tick is left in
+# place rather than removed on a transient gap.
 
 # Shared by both ssh calls below (liveness probe + features query) -- same
 # connection policy either way, no reason to duplicate the flag list.

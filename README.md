@@ -149,10 +149,9 @@ secret path** from a secrets manager like
 [agenix](https://github.com/ryantm/agenix) (a plain string, e.g.
 `config.sops.secrets."nix-dynamic-builders-key".path`), not a bare Nix
 path literal (`./nix-dynamic-builders_ed25519`) -- a path literal gets
-copied into the world-readable Nix store, and separately breaks
-`nix-dynamic-builders-show-key --default`'s `.pub`-sibling lookup (see
-`docs/decisions/0003`'s "known limitation"). The public half isn't
-secret, so it's fine to just paste its content directly:
+copied into the world-readable Nix store (see `docs/decisions/0003`).
+The public half isn't secret, so it's fine to just paste its content
+directly:
 
 ```nix
 # host A's configuration -- private key decrypted by sops-nix at

@@ -2,7 +2,11 @@
 # config) so an admin can wire two peers together without ever touching
 # ssh-keygen by hand. KEY_MAP_FILE (name<TAB>pub-path per line, "_default"
 # plus one row per configured peer) is injected by config.nix ahead of
-# this script's own body -- see showKeyScript there.
+# this script's own body -- see showKeyScript there. The path always
+# points into runtimeDir, never baseDir -- refresh.sh maintains it there
+# every tick regardless of key source (self-generated or admin-supplied),
+# so this script only ever reads a dedicated, non-secret location and
+# never needs any access to baseDir at all (see docs/decisions/0007).
 #
 # Whether a given key is actually readable by a non-root caller is pure
 # file permissions (see refresh.sh's PUBLIC_KEY_MODE handling), not

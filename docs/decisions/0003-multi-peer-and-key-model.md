@@ -115,21 +115,12 @@ extract the real one via `show-key`, redeploy) where the old static,
 pre-shared-keypair design didn't need one -- documented in README's Setup
 section.
 
-**A known limitation of the pre-existing-key (`sshKey = <path/string>`)
-option: `nix-dynamic-builders-show-key --default`/`<peer-name>` only
-finds the `.pub` sibling correctly when `sshKey` is a plain Nix
-**string** (an absolute path on the target machine), not a Nix **path
-literal** (e.g. `./my-key`). A path literal gets copied into the Nix
-store as its own independent, content-hashed object -- appending `.pub`
-to that resolved store path doesn't find a real sibling file the way it
-would on an actual filesystem, since Nix doesn't preserve "same source
-directory" relationships between separately-referenced files once
-copied. The idiomatic way to supply a real pre-existing key is exactly
-the thing that avoids this: hand `sshKey` the **decrypted secret path**
-from sops-nix or agenix (e.g.
-`config.sops.secrets."nix-dynamic-builders-key".path`), which is
-already a plain string, never a Nix path literal -- the private key
-also then never touches the Nix store at all, which a path literal
-always does regardless of this particular gap. README's own
-"skip the bootstrap step" example should point at this pattern rather
-than a raw path literal.**
+**Handing `sshKey` a pre-existing key still means choosing a string
+(e.g. a sops-nix decrypted secret path) over a Nix path literal.** A
+path literal gets copied into the Nix store as its own independent,
+content-hashed object and the private key itself then sits
+world-readable in the store -- a string avoids both. This used to also
+be the only way to get `nix-dynamic-builders-show-key` working for a
+pre-existing key at all (a path literal broke its `.pub`-sibling
+lookup); that specific gap is fixed now regardless of which form
+`sshKey` takes -- see `docs/decisions/0007`.

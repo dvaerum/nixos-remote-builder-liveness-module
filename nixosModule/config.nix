@@ -52,13 +52,38 @@ let
     peerCfg:
     if peerCfg.sshKey == false then cfg.publicKeyWorldReadable else peerCfg.publicKeyWorldReadable;
 
-  # name -> resolved .pub path, consumed by nix-dynamic-builders-show-key.
-  # "_default" is only listed when a shared default key actually exists.
+  # Where refresh.sh serves a public key from -- always runtimeDir
+  # (ephemeral), never baseDir (persistent, private-key-only). Populated
+  # fresh every tick regardless of key source: a cat of the natural .pub
+  # sibling for a self-generated key, or a direct ssh-keygen -y
+  # derivation for an admin-supplied key with no sibling (a
+  # sops-nix-decrypted secret, say -- sops manages the private half
+  # alone, since the public half isn't a secret worth deploying that
+  # way). One unconditional location either way means show-key.sh never
+  # needs to know or care which case it is, and never needs any access to
+  # baseDir at all (see docs/decisions/0007).
+  runtimePubKeyPath = name: "${cfg.runtimeDir}/publickeys/${name}.pub";
+
+  # Mirrors resolveSshKeyPath's own false/true/string branching, but for
+  # where the PUBLIC half is served from rather than the private half's
+  # own path: a peer inheriting the shared default key (peerKey == false)
+  # writes into the SAME shared "_default" runtime file every other
+  # inheriting peer also writes into (exactly like they all resolve to
+  # the SAME shared private key file) -- not its own peer-named file,
+  # which nothing would ever read via `show-key --default`. Only a peer
+  # with its own distinct key (true or a path/string) gets its own.
+  resolvePublicKeyPath =
+    peerName: peerKey:
+    if peerKey == false then runtimePubKeyPath "_default" else runtimePubKeyPath peerName;
+
+  # name -> runtime public-key path, consumed by nix-dynamic-builders-
+  # show-key. "_default" is only listed when a shared default key
+  # actually exists.
   keyMapFile = pkgs.writeText "nix-dynamic-builders-keymap" (
     lib.concatStringsSep "\n" (
-      lib.optional (cfg.sshKey != false) "_default\t${resolveDefaultKeyPath}.pub"
+      lib.optional (cfg.sshKey != false) "_default\t${runtimePubKeyPath "_default"}"
       ++ lib.mapAttrsToList (
-        peerName: peerCfg: "${peerName}\t${resolveSshKeyPath peerName peerCfg.sshKey}.pub"
+        peerName: peerCfg: "${peerName}\t${resolvePublicKeyPath peerName peerCfg.sshKey}"
       ) cfg.peers
     )
   );
@@ -100,12 +125,13 @@ in
     environment.systemPackages = [ showKeyScript ];
 
     # ── dispatching side: what THIS host uses to reach the peer ─────────
-    # 0711: world can traverse by exact (documented, fixed) filename --
-    # ssh_key.pub -- but can't list the directory. Actual read access to
-    # any given file is gated by that file's own mode, set below per key.
+    # 0700: private key material only lives under baseDir, never a public
+    # key (those are served from runtimeDir instead, see runtimePubKeyPath
+    # above) -- nothing here needs any non-root access at all, so there's
+    # no traversal exception to carve out.
     systemd.tmpfiles.rules = [
-      "d ${cfg.baseDir} 0711 root root -"
-      "d ${cfg.baseDir}/ssh-keys 0711 root root -"
+      "d ${cfg.baseDir} 0700 root root -"
+      "d ${cfg.baseDir}/ssh-keys 0700 root root -"
     ];
 
     systemd.services = lib.mapAttrs' (
@@ -135,6 +161,7 @@ in
             # Key generation
             "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
             "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
+            "PUBLIC_KEY_PATH=${resolvePublicKeyPath peerName peerCfg.sshKey}"
             # Connection options (ssh_opts)
             "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
             "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"

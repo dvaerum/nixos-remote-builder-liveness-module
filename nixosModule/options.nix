@@ -57,9 +57,12 @@ in
       default = "/run/nix-dynamic-builders";
       description = ''
         Ephemeral runtime directory (tmpfs, recreated fresh every boot):
-        the assembled `machines` file nix-daemon reads and each peer's own
-        fragment. Liveness has no meaning across a reboot, so this lives
-        outside `baseDir` on purpose.
+        the assembled `machines` file nix-daemon reads, each peer's own
+        fragment, and each peer's current public key (served here, not
+        from `baseDir`, so `nix-dynamic-builders-show-key` never needs any
+        access to `baseDir` at all -- see `docs/decisions/0007`). Liveness
+        has no meaning across a reboot, so this lives outside `baseDir`
+        on purpose.
       '';
     };
 

@@ -122,13 +122,19 @@ in
         fi
     """)
 
-    # --default against a self-generated shared key: both halves exist
-    # together on disk (refresh.sh created them), so unlike the
-    # path-literal admin-provided case (not tested, see liveness.nix),
-    # the .pub-sibling convention genuinely applies here.
+    # --default against the shared default key: the race loop above only
+    # ever exercises the raw refresh binary with the two key-generation
+    # env vars set (deliberately, see its own comment), so it never
+    # reaches the public-key-serving step and never populates runtimeDir
+    # -- a REAL tick, through the actual rendered unit (full Environment=,
+    # including PUBLIC_KEY_PATH), is needed first. Doesn't need to
+    # actually reach "workstation" (nothing trusts this made-up host) --
+    # only the public-key-serving step, which runs before the probe loop,
+    # needs to succeed.
+    multiPeer.succeed("systemctl start nix-dynamic-builders-refresh-workstation.service || true")
     multiPeer.succeed(
         "diff <(nix-dynamic-builders-show-key --default) "
-        "/var/lib/nix-dynamic-builders/ssh-keys/_default/ssh_key.pub"
+        "/run/nix-dynamic-builders/publickeys/_default.pub"
     )
 
     # explicit-key.nix: the pre-existing fixture key is used as-is, not

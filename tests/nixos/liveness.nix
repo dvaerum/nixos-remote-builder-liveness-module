@@ -37,6 +37,13 @@ let
     builtins.stringLength testSshPublicKey2File - 1
   ) testSshPublicKey2File;
 
+  # A plain STRING path (not a Nix path literal, to isolate this scenario
+  # from docs/decisions/0003's separate, already-documented path-literal
+  # gap) with NO .pub sibling ever placed there -- the testScript copies
+  # ONLY testSshKey's private-key bytes to this exact path, mirroring a
+  # sops-nix-decrypted secret on a real deployment (docs/decisions/0007).
+  sshKeyNoSiblingPath = "/run/nix-dynamic-builders-test/nopub-key";
+
   # peerHostnames: list of OTHER hosts this container should probe. Plain
   # builtins only (map/listToAttrs) -- this file is a bare attrset handed
   # straight to pkgs.testers.nixosTest, not a module function, so there's
@@ -112,6 +119,17 @@ in
       # are genuinely independent: alice dispatches TO dan even though dan
       # itself never enables services.nixDynamicBuilders at all.
       services.nixDynamicBuilders.peers.dan.maxJobs = 1;
+      # A fifth, synthetic peer purely to exercise nix-dynamic-builders-show-key
+      # against an admin-supplied key with NO .pub sibling on disk -- a sops-nix
+      # -decrypted secret, say, where only the private half is ever deployed.
+      # Never expected to actually connect (like selfgen) -- the testScript
+      # below populates sshKeyNoSiblingPath with ONLY a private key, no .pub
+      # file alongside it, before calling show-key.
+      services.nixDynamicBuilders.peers.nopub = {
+        hostname = "localhost";
+        maxJobs = 1;
+        sshKey = sshKeyNoSiblingPath;
+      };
     };
     bob = {
       imports = [ (peerConfig [ "alice" ]) ];
@@ -240,17 +258,49 @@ in
     alice.succeed("test -s /var/lib/nix-dynamic-builders/ssh-keys/selfgen/ssh_key")
     alice.succeed("test -s /var/lib/nix-dynamic-builders/ssh-keys/selfgen/ssh_key.pub")
 
-    # show-key prints exactly what's on disk.
+    # show-key prints the runtime copy, byte-identical to the natural
+    # sibling it was copied from (docs/decisions/0007) -- diff succeeds
+    # either way, since the content is the same, but show-key itself
+    # never reads this baseDir path directly.
     alice.succeed(
         "diff <(nix-dynamic-builders-show-key selfgen) "
         "/var/lib/nix-dynamic-builders/ssh-keys/selfgen/ssh_key.pub"
     )
 
+    # nopub: an admin-supplied key with deliberately NO .pub sibling placed
+    # next to it (mirroring a real sops-nix-decrypted secret) -- only the
+    # private half is ever written here, never a .pub file. refresh.sh
+    # must still derive and serve the correct public key from
+    # PUBLIC_KEY_PATH (docs/decisions/0007), not just skip it; show-key
+    # itself never touches the private key at all, only ever reading
+    # whatever refresh.sh already served.
+    alice.succeed(
+        "install -D -m 600 ${testSshKey} /run/nix-dynamic-builders-test/nopub-key"
+    )
+    alice.succeed("test ! -e /run/nix-dynamic-builders-test/nopub-key.pub")
+    # The tick itself doesn't need to succeed (nothing trusts this
+    # synthetic peer's key, same as selfgen) -- it just needs to run once
+    # so the public-key-serving step fires, which happens before the
+    # (failing) probe loop.
+    alice.succeed("systemctl start nix-dynamic-builders-refresh-nopub.service || true")
+    # Compared by VALUE against the known-correct testSshPublicKey string,
+    # not by re-deriving a path via "${testSshKey}.pub" -- interpolating a
+    # Nix path copies it into the store first, so appending ".pub" looks
+    # for a sibling of THAT store copy, which (same footgun
+    # examples/explicit-key.nix had) was never itself copied and so
+    # doesn't exist.
+    alice.succeed(
+        "[ \"$(nix-dynamic-builders-show-key nopub)\" = '${testSshPublicKey}' ]"
+    )
+
     # publicKeyWorldReadable = false on this peer -> a non-root user can't
-    # read the pub key file directly...
+    # read the pub key file directly. Checked against the RUNTIME copy,
+    # not baseDir -- baseDir is 0700 regardless of this toggle (nothing
+    # public-facing lives there anymore, see docs/decisions/0007), so
+    # checking it would pass even if this toggle did nothing at all.
     alice.fail(
         "su nobody -s /bin/sh -c "
-        "'cat /var/lib/nix-dynamic-builders/ssh-keys/selfgen/ssh_key.pub'"
+        "'cat /run/nix-dynamic-builders/publickeys/selfgen.pub'"
     )
     # ...and show-key, run as that same non-root user, fails the same way
     # (no privilege logic of its own -- it's just the file permission).
