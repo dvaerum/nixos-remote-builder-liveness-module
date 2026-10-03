@@ -52,8 +52,11 @@ tests/nixos/        liveness.nix -- a real multi-peer nixosTest (systemd-nspawn,
                     queries, self-generated keys, and show-key.
                     examples.nix -- every examples/ file actually evaluates
                     and wires up the units it claims to.
-tests/fixtures/      test-ed25519 -- a throwaway keypair generated solely for
-                    the tests above; not a real secret, safe to read/regenerate
+tests/fixtures/      test-ed25519, test-ed25519-2 -- two throwaway keypairs
+                    generated solely for the tests above (two, not one, so a
+                    test can prove two genuinely different real keys both get
+                    accepted, not the same fixture key reused under two
+                    names); not real secrets, safe to read/regenerate
 docs/decisions/      one ADR per real design decision, with sources cited
 docs/options.md      generated option reference -- see "Documentation" below
 generate-doc.nix    regenerates docs/options.md -- see "Documentation" below

@@ -25,6 +25,18 @@ let
     builtins.stringLength testSshPublicKeyFile - 1
   ) testSshPublicKeyFile;
 
+  # A SECOND, genuinely distinct keypair -- every other peer in this file
+  # authenticates with the SAME testSshKey/testSshPublicKey above, which
+  # never actually proves two different real keys both get accepted by
+  # the same authorized_keys file (a regression that silently only ever
+  # rendered the first configured peer's line, say, would pass every
+  # other assertion here). See "eve" below.
+  testSshKey2 = ../fixtures/test-ed25519-2;
+  testSshPublicKey2File = builtins.readFile ../fixtures/test-ed25519-2.pub;
+  testSshPublicKey2 = builtins.substring 0 (
+    builtins.stringLength testSshPublicKey2File - 1
+  ) testSshPublicKey2File;
+
   # peerHostnames: list of OTHER hosts this container should probe. Plain
   # builtins only (map/listToAttrs) -- this file is a bare attrset handed
   # straight to pkgs.testers.nixosTest, not a module function, so there's
@@ -129,7 +141,25 @@ in
       services.openssh.enable = true;
       services.nixDynamicBuilderUser = {
         enable = true;
+        # Two peers, two genuinely distinct keypairs -- alice reuses the
+        # shared testSshKey every other peer in this file uses; eve below
+        # authenticates with testSshKey2 instead, so dan's authorized_keys
+        # ends up with two real, different keys, not the same one twice.
         peers.alice.publicKey = testSshPublicKey;
+        peers.eve.publicKey = testSshPublicKey2;
+      };
+    };
+
+    # Dispatch-only, like alice's relationship to dan, but with a
+    # completely different identity -- the actual proof that
+    # services.nixDynamicBuilderUser.peers accepts two DIFFERENT real
+    # keys at once, not just the same fixture key reused under two names.
+    eve = {
+      imports = [ ../../nixosModule ];
+      services.nixDynamicBuilders = {
+        enable = true;
+        sshKey = testSshKey2;
+        peers.dan.maxJobs = 1;
       };
     };
   };
@@ -151,6 +181,14 @@ in
     dan.fail("command -v nix-dynamic-builders-show-key")
     dan.fail("test -d /run/nix-dynamic-builders")
 
+    # Two configured peers (alice, eve) -> two rendered authorized_keys
+    # lines, confirmed directly, before even trying to authenticate as
+    # either -- a renamed/dropped peers.<name> wouldn't reduce this count
+    # but a genuinely broken mapAttrsToList would.
+    dan.succeed(
+        "[ \"$(grep -c restrict /etc/ssh/authorized_keys.d/nix-remote-builder)\" -eq 2 ]"
+    )
+
     # Force both of alice's real-peer ticks now instead of waiting out the
     # real 60s timer, and confirm BOTH fragments land in the assembled file
     # -- not just that one peer's write doesn't crash, but that two peers'
@@ -166,6 +204,14 @@ in
     # independently.
     alice.succeed("systemctl start nix-dynamic-builders-refresh-dan.service")
     alice.wait_until_succeeds("grep -q dan /run/nix-dynamic-builders/machines")
+
+    # eve dispatches to dan too, authenticating with a COMPLETELY different
+    # keypair (testSshKey2) than alice's (testSshKey) -- the actual proof
+    # that dan's authorized_keys genuinely has two distinct working keys,
+    # not the same fixture key installed twice under different names.
+    eve.wait_for_unit("multi-user.target")
+    eve.succeed("systemctl start nix-dynamic-builders-refresh-dan.service")
+    eve.wait_until_succeeds("grep -q dan /run/nix-dynamic-builders/machines")
 
     # supportedFeatures is live-fetched from the peer, not echoed from
     # alice's own static config -- bob's real system-features includes a
