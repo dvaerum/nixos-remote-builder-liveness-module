@@ -161,9 +161,13 @@ attribute set of (submodule)
 
 ```nix
 {
-  workstation.publicKey = "ssh-ed25519 AAAA...workstation's-public-key";
+  # The trailing comment is optional -- sshd ignores it, it's purely
+  # a human-readable label (see authorized_keys's own format).
+  workstation = {
+    publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDj28OND0mtMrx61UE2LXJt4EnQ0kDg5N+ORYze91Esl";
+  };
   remote-site = {
-    publicKey = "ssh-ed25519 AAAA...remote-site's-public-key";
+    publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxuQ74L9OMA5x5W2HRjS4u34o+szvbPIVFN66548HHT remote-site";
     niceLevel = 15; # a shared, busier box -- be a little less polite
   };
 }
