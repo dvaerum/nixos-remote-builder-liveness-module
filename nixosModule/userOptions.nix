@@ -20,7 +20,7 @@ in
     niceLevel = lib.mkOption {
       type = lib.types.int;
       default = 19;
-      description = "`nice` priority for `nix-store --serve` -- a scheduling courtesy, not a security control.";
+      description = "`nice` priority for `nix-daemon --stdio` -- a scheduling courtesy, not a security control.";
     };
 
     peers = lib.mkOption {

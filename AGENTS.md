@@ -37,7 +37,7 @@ refresh.sh          the liveness-probe script, one instance per configured
                     peer, wrapped via pkgs.writeShellApplication in config.nix
                     -- edit this file directly, not an inline string
 dispatch.sh         the receiving side's forced authorized_keys command --
-                    branches between nix-store --serve and a live
+                    branches between nix-daemon --stdio and a live
                     supportedFeatures query, see docs/decisions/0003
 show-key.sh         nix-dynamic-builders-show-key's script body -- prints a
                     public key for the Setup bootstrap flow in README.md

@@ -58,8 +58,8 @@ flowchart TD
     Q["command=#34;nix-dynamic-builders-dispatch #60;nice-level#62; nix-dynamic-builders-query-features#34;,restrict #60;pubkey#62;<br/>-- can NEVER open a shell or run anything else even if the<br/>private half leaks: the forced command always runs regardless<br/>of what the client asks for"]
     R{"$SSH_ORIGINAL_COMMAND ==<br/>nix-dynamic-builders-query-features ?"}
     S["nix config show system<br/>nix config show system-features<br/>(the live system + feature query, one SSH round trip)"]
-    T["nice -#60;level#62; nix-store --serve --write<br/>(anything else, including nix-daemon's own real build dispatch)"]
-    U["nix.settings.trusted-users = [ #34;nix-remote-builder#34; ]<br/>-- lets --serve import build inputs without a per-path signature check"]
+    T["nice -#60;level#62; nix-daemon --stdio<br/>(anything else, including nix-daemon's own real build dispatch)"]
+    U["nix.settings.trusted-users = [ #34;nix-remote-builder#34; ]<br/>-- lets this user import build inputs without a per-path signature check"]
 
     P --> Q --> R
     R -->|"yes"| S
@@ -94,7 +94,10 @@ rather than root, and
 [`docs/decisions/0010`](docs/decisions/0010-per-peer-ssh-config.md) for
 how a peer-specific jump host (`peers.<name>.extraSshConfig`, see
 [`examples/jump-host.nix`](examples/jump-host.nix)) works despite
-`NIX_SSHOPTS` being daemon-wide.
+`NIX_SSHOPTS` being daemon-wide, and
+[`docs/decisions/0011`](docs/decisions/0011-ssh-ng-protocol-fix.md) for
+why the receiving side execs `nix-daemon --stdio`, not
+`nix-store --serve`.
 
 ## Setup
 

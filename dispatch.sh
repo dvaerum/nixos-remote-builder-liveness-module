@@ -39,6 +39,19 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
     exec nix --extra-experimental-features nix-command config show system-features
     ;;
   *)
-    exec nice -"$nice_level" nix-store --serve --write
+    # nix-daemon --stdio, not `nix-store --serve` -- refresh.sh always
+    # writes machines-file entries as ssh-ng://, and Nix's own ssh-ng://
+    # client (SSHStoreConfig::remoteProgram, src/libstore/ssh-store.cc)
+    # always execs "<remoteProgram> --stdio" expecting nix-daemon's own
+    # wire protocol; `nix-store --serve` speaks the OLDER, incompatible
+    # protocol legacy ssh:// stores expect instead (see
+    # src/libstore/legacy-ssh-store.cc). Run as this unprivileged user
+    # (not root): nix-daemon --stdio with no NIX_REMOTE override resolves
+    # to the local "daemon" store and transparently forwards this
+    # connection to the real system nix-daemon's own Unix socket -- the
+    # same trust path (nix.settings.trusted-users, see userConfig.nix)
+    # `nix-store --serve` already relied on, not a new one. See
+    # docs/decisions/0011.
+    exec nice -"$nice_level" nix-daemon --stdio
     ;;
 esac

@@ -44,7 +44,7 @@ as much as running `sudo` on each other locally:
   accepted as-is over the SSH channel.
 - The receiving side's authorized key is restricted via a forced
   `command=` + `restrict` in `authorized_keys`, so it can only ever
-  invoke `nix-store --serve`, never open a shell -- but that still
+  invoke `nix-daemon --stdio`, never open a shell -- but that still
   grants the ability to import and serve build inputs as a trusted
   user (`nix.settings.trusted-users`), which is a meaningful privilege
   on its own.

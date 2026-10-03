@@ -114,7 +114,7 @@ reachable=0
 for attempt in $(seq 1 "$PROBE_RETRIES"); do
   # The receiving side's authorized_keys forces its own command (restrict +
   # command=) regardless of what we ask to run here -- "true" is never what
-  # actually executes, the real nix-store --serve is, and IT exits non-zero
+  # actually executes, the real nix-daemon --stdio is, and IT exits non-zero
   # against a probe that sends no real protocol data. So a plain "did ssh
   # exit 0" check can never see a reachable peer as reachable. ssh itself
   # reserves exit code 255 for a connection/auth-level failure and passes
@@ -135,7 +135,7 @@ done
 
 # Live system + supportedFeatures, fetched over the same restricted channel
 # (the dispatcher on the peer answers this one sentinel command distinctly
-# from the real nix-store --serve, see dispatch.sh) -- only worth asking
+# from the real nix-daemon --stdio, see dispatch.sh) -- only worth asking
 # once we already know the peer's reachable this tick. supportedFeatures
 # falls back to its static config value if the query comes back empty
 # (safe either way: under- or over-advertising a feature just changes

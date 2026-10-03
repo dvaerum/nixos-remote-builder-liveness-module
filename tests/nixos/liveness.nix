@@ -227,6 +227,40 @@ in
     alice.wait_until_succeeds("grep -q bob /run/nix-dynamic-builders/machines")
     alice.wait_until_succeeds("grep -q carol /run/nix-dynamic-builders/machines")
 
+    # docs/decisions/0011: the actual ssh-ng:// WIRE PROTOCOL handshake,
+    # not just "the machines file has a line". nix-daemon's ssh-ng://
+    # client code is a plain `nix` CLI store implementation, so this
+    # reaches real SSH authentication and a real forced-command dispatch
+    # on carol. It can't get all the way to a working connection in THIS
+    # environment: carol's nix-daemon.service, once a real connection
+    # reaches it, fails on `chown("/nix/store")` with "Operation not
+    # permitted" (confirmed via carol's own journal) -- systemd-nspawn
+    # containers don't grant the capability nix-daemon's LocalStore needs
+    # for that, the same class of limitation docs/decisions/0004 already
+    # accepted as this test backend's trade-off, and the same wall
+    # docs/decisions/0008's own abandoned build-dispatch test hit -- just
+    # diagnosed precisely this time, instead of as an opaque "service
+    # won't start". So the assertion below is deliberately narrower than
+    # "the whole round-trip succeeds": confirmed (by temporarily
+    # reverting dispatch.sh's fix and re-running) that the OLD bug
+    # produces the exact string "error: protocol mismatch" -- Nix's own
+    # legacy-ssh-store.cc literally emits that when a `nix-store --serve`
+    # peer responds to an ssh-ng:// handshake -- while the chown wall
+    # above never does. Asserting its absence is exactly the regression
+    # this test exists to catch, without needing the full round-trip (or
+    # this environment's missing capability) to succeed.
+    carol.succeed("systemctl start nix-daemon.service")
+    _, output = alice.execute(
+        "NIX_SSHOPTS='-F /dev/null "
+        "-o UserKnownHostsFile=/var/lib/nix-dynamic-builders/known_hosts "
+        "-o StrictHostKeyChecking=accept-new' "
+        "nix --extra-experimental-features nix-command store ping "
+        "--store 'ssh-ng://nix-remote-builder@carol?ssh-key=${testSshKey}' 2>&1"
+    )
+    assert "error: protocol mismatch" not in output, (
+        f"regression: dispatch.sh is back to execing the OLD, ssh-ng://-incompatible nix-store --serve: {output!r}"
+    )
+
     # docs/decisions/0008: nix-daemon's REAL ssh-ng:// build-dispatch
     # connection is a completely separate trust path from the probe's,
     # so confirmed-reachable never actually guaranteed a build could

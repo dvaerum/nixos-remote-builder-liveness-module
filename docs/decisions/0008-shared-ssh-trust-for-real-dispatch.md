@@ -47,13 +47,21 @@ already rejected pre-pinning for.
 A real end-to-end test (a forced-remote build via `nix-build
 --max-jobs 0`, chosen specifically because it can't silently fall back
 to local the way the real system that surfaced this bug did) was
-attempted and had to be abandoned: `nix-daemon.service` never starts at
-all in this project's `systemd-nspawn`-based test environment,
-confirmed unrelated to this fix by reproducing the identical failure
-with the fix entirely absent (`docs/decisions/0004`'s own tradeoffs
-already note containers can't do everything a full VM can -- this
-appears to be one more instance). What's verified instead: the fix is
-correctly wired into the rendered `nix-daemon` unit. That's a narrower
-guarantee than the full proof this fix deserves, not a substitute for
-it -- a real deployment (or a VM-backed test) remains the only way to
-confirm the actual SSH connection succeeds.
+attempted and had to be abandoned: `nix-daemon.service` showed
+`inactive (dead)` with an empty journal throughout, confirmed unrelated
+to this fix by reproducing the identical failure with the fix entirely
+absent (`docs/decisions/0004`'s own tradeoffs already note containers
+can't do everything a full VM can -- this appears to be one more
+instance). What's verified instead: the fix is correctly wired into the
+rendered `nix-daemon` unit. That's a narrower guarantee than the full
+proof this fix deserves, not a substitute for it.
+
+**Update (`docs/decisions/0011`):** a later, independent real-protocol
+test pinned this down precisely -- `nix-daemon.service` isn't actually
+unable to start (`systemctl start` reaches `active (running)` directly);
+cold socket activation is just too slow relative to a connecting
+client's own timeout, and even once running, a real connection hits a
+missing container capability (`chown("/nix/store")` fails with
+`Operation not permitted`). Still the same class of nspawn limitation
+this ADR already accepted, now diagnosed to the exact syscall instead of
+an opaque "won't start".

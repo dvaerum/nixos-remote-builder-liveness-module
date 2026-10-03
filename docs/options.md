@@ -109,7 +109,7 @@ true
 
 
 
-` nice ` priority for ` nix-store --serve ` – a scheduling courtesy, not a security control\.
+` nice ` priority for ` nix-daemon --stdio ` – a scheduling courtesy, not a security control\.
 
 
 

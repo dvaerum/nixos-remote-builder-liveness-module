@@ -56,7 +56,7 @@ in
       # login is allowed again.
       hashedPassword = "*";
       # restrict,command= means this key can ONLY ever invoke dispatchScript
-      # (which itself only ever runs nix-store --serve or a features query,
+      # (which itself only ever runs nix-daemon --stdio or a features query,
       # see dispatch.sh) -- never a shell, never arbitrary commands, even if
       # the private key half of this pair leaked. One line per configured
       # peer -- all mapping to this same shared account, since the forced
@@ -73,7 +73,7 @@ in
       ) cfg.peers;
     };
 
-    # nix-store --serve needs to import build-input paths without a
+    # nix-daemon --stdio needs to import build-input paths without a
     # per-path signature check.
     nix.settings.trusted-users = [ "nix-remote-builder" ];
   };
