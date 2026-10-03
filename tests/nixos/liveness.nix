@@ -216,6 +216,30 @@ in
     alice.wait_until_succeeds("grep -q bob /run/nix-dynamic-builders/machines")
     alice.wait_until_succeeds("grep -q carol /run/nix-dynamic-builders/machines")
 
+    # docs/decisions/0008: nix-daemon's REAL ssh-ng:// build-dispatch
+    # connection is a completely separate trust path from the probe's,
+    # so confirmed-reachable never actually guaranteed a build could
+    # dispatch there. A genuine end-to-end proof -- a real forced-remote
+    # build via `nix-build --max-jobs 0`, which cannot silently fall back
+    # to local the way the bug report's own real system did -- was
+    # attempted here and had to be abandoned: nix-daemon.service never
+    # starts at all in this test environment (systemd-nspawn container),
+    # confirmed unrelated to this fix specifically by reproducing the
+    # identical failure with the fix entirely absent. This is a
+    # pre-existing limitation of the nspawn test backend (docs/decisions
+    # /0004), not something this fix introduced or could route around --
+    # see that ADR's "Alternatives considered" for why a real nixosTest
+    # already can't exhaustively replace real-world verification.
+    #
+    # What's checked instead: the fix is actually wired into the
+    # rendered nix-daemon unit (catches a future accidental removal or
+    # typo) -- not a substitute for the full proof, just the honest
+    # floor this environment allows.
+    alice.succeed(
+        "systemctl cat nix-daemon.service | grep -q "
+        "'NIX_SSHOPTS=-o UserKnownHostsFile=/var/lib/nix-dynamic-builders/known_hosts -o StrictHostKeyChecking=accept-new'"
+    )
+
     # alice dispatches TO dan even though dan never enabled
     # services.nixDynamicBuilders itself -- the real end-to-end proof that
     # the two services are independent, not just that they evaluate

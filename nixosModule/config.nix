@@ -134,57 +134,86 @@ in
       "d ${cfg.baseDir}/ssh-keys 0700 root root -"
     ];
 
-    systemd.services = lib.mapAttrs' (
-      peerName: peerCfg:
-      lib.nameValuePair "nix-dynamic-builders-refresh-${peerName}" {
-        description = "Probe ${peerCfg.hostname} liveness and rewrite the dynamic nix builders file";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = lib.getExe refreshScript;
-          # Shared by every peer's refresh service (same name): systemd
-          # refcounts a RuntimeDirectory used by multiple units, tearing it
-          # down only once none of them reference it. Preserve=yes on top
-          # of that stops it being wiped between THIS unit's own oneshot
-          # ticks too -- without it the machines file (and sibling peers'
-          # fragments) would vanish every time any single peer's tick
-          # completes, not just at reboot.
-          RuntimeDirectory = "nix-dynamic-builders";
-          RuntimeDirectoryPreserve = "yes";
-          # Grouped by the phases refresh.sh itself reads these in (key
-          # gen -> ssh_opts -> probe loop -> feature query -> fragment
-          # write -> reassembly), not alphabetically or by category --
-          # so "which concern owns this var" is visible without cross-
-          # referencing refresh.sh's own comments. Order WITHIN a group
-          # isn't significant (refresh.sh doesn't read every var in a
-          # group in this exact sequence).
-          Environment = [
-            # Key generation
-            "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
-            "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
-            "PUBLIC_KEY_PATH=${resolvePublicKeyPath peerName peerCfg.sshKey}"
-            # Connection options (ssh_opts)
-            "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
-            "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
-            "STRICT_HOST_KEY_CHECKING=${peerCfg.strictHostKeyChecking}"
-            # Probe loop
-            "PEER_USER=nix-remote-builder"
-            "PEER_HOSTNAME=${peerCfg.hostname}"
-            "PROBE_RETRIES=${toString peerCfg.probeRetries}"
-            "PROBE_RETRY_DELAY=${peerCfg.probeRetryDelay}"
-            # Feature query
-            "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
-            "FEATURE_QUERY_COMMAND=${featureQuerySentinel}"
-            # Fragment write
-            "PEER_MAX_JOBS=${toString peerCfg.maxJobs}"
-            "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
-            "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
-            "FRAGMENT_FILE=${cfg.runtimeDir}/machines.d/${peerName}"
-            # Reassembly
-            "MACHINES_FILE=${cfg.runtimeDir}/machines"
-          ];
-        };
-      }
-    ) cfg.peers;
+    systemd.services =
+      (lib.mapAttrs' (
+        peerName: peerCfg:
+        lib.nameValuePair "nix-dynamic-builders-refresh-${peerName}" {
+          description = "Probe ${peerCfg.hostname} liveness and rewrite the dynamic nix builders file";
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = lib.getExe refreshScript;
+            # Shared by every peer's refresh service (same name): systemd
+            # refcounts a RuntimeDirectory used by multiple units, tearing it
+            # down only once none of them reference it. Preserve=yes on top
+            # of that stops it being wiped between THIS unit's own oneshot
+            # ticks too -- without it the machines file (and sibling peers'
+            # fragments) would vanish every time any single peer's tick
+            # completes, not just at reboot.
+            RuntimeDirectory = "nix-dynamic-builders";
+            RuntimeDirectoryPreserve = "yes";
+            # Grouped by the phases refresh.sh itself reads these in (key
+            # gen -> ssh_opts -> probe loop -> feature query -> fragment
+            # write -> reassembly), not alphabetically or by category --
+            # so "which concern owns this var" is visible without cross-
+            # referencing refresh.sh's own comments. Order WITHIN a group
+            # isn't significant (refresh.sh doesn't read every var in a
+            # group in this exact sequence).
+            Environment = [
+              # Key generation
+              "SSH_KEY_PATH=${resolveSshKeyPath peerName peerCfg.sshKey}"
+              "PUBLIC_KEY_MODE=${if effectivePublicKeyWorldReadable peerCfg then "0644" else "0600"}"
+              "PUBLIC_KEY_PATH=${resolvePublicKeyPath peerName peerCfg.sshKey}"
+              # Connection options (ssh_opts)
+              "CONNECT_TIMEOUT=${toString peerCfg.connectTimeout}"
+              "KNOWN_HOSTS_FILE=${cfg.knownHostsFile}"
+              "STRICT_HOST_KEY_CHECKING=${peerCfg.strictHostKeyChecking}"
+              # Probe loop
+              "PEER_USER=nix-remote-builder"
+              "PEER_HOSTNAME=${peerCfg.hostname}"
+              "PROBE_RETRIES=${toString peerCfg.probeRetries}"
+              "PROBE_RETRY_DELAY=${peerCfg.probeRetryDelay}"
+              # Feature query
+              "PEER_SUPPORTED_FEATURES=${featureList peerCfg.supportedFeatures}"
+              "FEATURE_QUERY_COMMAND=${featureQuerySentinel}"
+              # Fragment write
+              "PEER_MAX_JOBS=${toString peerCfg.maxJobs}"
+              "PEER_SPEED_FACTOR=${toString peerCfg.speedFactor}"
+              "PEER_MANDATORY_FEATURES=${featureList peerCfg.mandatoryFeatures}"
+              "FRAGMENT_FILE=${cfg.runtimeDir}/machines.d/${peerName}"
+              # Reassembly
+              "MACHINES_FILE=${cfg.runtimeDir}/machines"
+            ];
+          };
+        }
+      ) cfg.peers)
+      // {
+        # Liveness detection alone does NOT guarantee a real build
+        # dispatch will actually reach a peer -- confirmed via a real
+        # deployment and Nix's own source (src/libstore/ssh.cc,
+        # src/libstore/machines.cc, Nix 2.34.8): the probe's SSH
+        # connection and nix-daemon's REAL ssh-ng:// build-dispatch
+        # connection are two entirely separate trust paths. The probe
+        # explicitly uses its own private knownHostsFile (refresh.sh's
+        # `-F /dev/null -o UserKnownHostsFile=...`); the machines-file
+        # line's host-key field is deliberately left as "-" (TOFU, not
+        # pre-pinned -- see docs/decisions/0002), so nix-daemon's own
+        # connection never gets a matching UserKnownHostsFile override
+        # and falls back entirely to ambient system SSH config, which
+        # this module never touches. On a host with no other SSH trust
+        # already established for the peer, the daemon's connection
+        # fails outright (non-interactive, can't prompt) -- confirmed
+        # reproducible, see docs/decisions/0008.
+        #
+        # NIX_SSHOPTS is read first, before anything else, for every
+        # ssh-ng:// connection nix-daemon makes (ssh.cc's
+        # addCommonSSHOpts) -- pointing it at the SAME file the probe
+        # already TOFU-populates closes the gap with one shared trust
+        # source, not a second one. Daemon-wide, not per-peer, and so
+        # lives alongside the per-peer refresh units here rather than
+        # inside the mapAttrs' above: Nix has no per-machine ssh-options
+        # field at all, so this is the only lever available regardless.
+        nix-daemon.environment.NIX_SSHOPTS = "-o UserKnownHostsFile=${cfg.knownHostsFile} -o StrictHostKeyChecking=accept-new";
+      };
 
     systemd.timers = lib.mapAttrs' (
       peerName: peerCfg:

@@ -81,7 +81,13 @@ why the test suite runs on `systemd-nspawn` rather than QEMU, and
 for why dispatching to peers and accepting connections from peers are
 two independently-enableable services, and
 [`docs/decisions/0006`](docs/decisions/0006-live-system.md) for why
-`system` is live-fetched the same way, with no static fallback at all.
+`system` is live-fetched the same way, with no static fallback at all,
+[`docs/decisions/0007`](docs/decisions/0007-public-key-served-from-runtime-dir.md)
+for why `show-key` serves public keys from `runtimeDir` rather than
+`baseDir`, and
+[`docs/decisions/0008`](docs/decisions/0008-shared-ssh-trust-for-real-dispatch.md)
+for why a reachable peer doesn't by itself guarantee a real build can
+reach it.
 
 ## Setup
 
