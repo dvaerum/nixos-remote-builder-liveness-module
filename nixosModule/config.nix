@@ -177,6 +177,20 @@ in
         }
         ++ [
           {
+            # Rendered verbatim into "nix-dynamic-builders-refresh-${peerName}",
+            # both a systemd unit name and a Nix derivation name -- a
+            # peer name containing '/' or other illegal characters fails
+            # evaluation with a confusing error from deep inside the
+            # module system instead of a clear one naming the actual
+            # peer and option at fault.
+            assertion = builtins.match "[a-zA-Z0-9_.-]+" peerName != null;
+            message = ''
+              services.nixDynamicBuilders.peers.${peerName}: this peer's
+              own name contains characters other than letters, digits,
+              '.', '_', and '-' -- unsafe to use in a systemd unit name.
+            '';
+          }
+          {
             # Rendered verbatim into a `Host ${hostname}` line in the
             # shared ssh_config file (see docs/decisions/0010) -- an
             # unescaped `*`/`?` lets this block's IdentityFile/
@@ -247,6 +261,31 @@ in
             ExecStart = lib.getExe refreshScript;
             User = "nix-dynamic-builders";
             Group = "nix-dynamic-builders";
+            # Defense in depth, not a response to any known exploit: `ssh`
+            # is the one thing in this unit parsing bytes a peer (not
+            # this host) controls, so a memory-safety bug in the SSH
+            # client is the one realistic way this process could be
+            # steered into doing something unintended. None of this
+            # costs any real functionality -- refresh.sh only does file
+            # I/O under baseDir/runtimeDir and spawns ssh/ssh-keygen.
+            NoNewPrivileges = true;
+            ProtectSystem = "strict";
+            ReadWritePaths = [ cfg.baseDir ];
+            ProtectHome = true;
+            ProtectKernelTunables = true;
+            ProtectKernelModules = true;
+            ProtectControlGroups = true;
+            RestrictNamespaces = true;
+            RestrictAddressFamilies = [
+              "AF_UNIX"
+              "AF_INET"
+              "AF_INET6"
+            ];
+            MemoryDenyWriteExecute = true;
+            LockPersonality = true;
+            SystemCallFilter = [ "@system-service" ];
+            CapabilityBoundingSet = [ ];
+            PrivateTmp = true;
             # Shared by every peer's refresh service (same name): systemd
             # refcounts a RuntimeDirectory used by multiple units, tearing it
             # down only once none of them reference it. Preserve=yes on top

@@ -53,3 +53,30 @@ explicit owner. Both were fixed to match what a correct real-world setup
 now requires, surfacing this exact permission boundary as a real,
 reproducible test failure rather than leaving it undiscovered until a
 production deploy.
+
+**This is not a new privilege boundary, just a narrower one than
+"root."** `nix-dynamic-builders` is still the sole, unchecked author of
+the machines file `nix-daemon` (root) trusts unconditionally for real
+build dispatch -- compromising this account doesn't grant arbitrary
+root syscalls, but it does grant "point root's build dispatch at an
+attacker-chosen host and key," which is already most of what mattered
+about root here. The privilege drop removes the *unnecessary* extra
+capabilities (direct filesystem access outside `baseDir`/`runtimeDir`,
+etc.), not this one.
+
+**sops-nix's `owner=` has no transient permissive window**, confirmed
+by reading `sops-install-secrets`'s own source
+(`writeSecrets`/`os.WriteFile` in `pkgs/sops-install-secrets/main.go`):
+the secret file is created with its final, restrictive `mode` from the
+very first write, then `chown`'d from root to the configured owner
+afterward -- the brief pre-chown window is root-owned with that same
+restrictive mode already in place, which is *more* restrictive than the
+final state, not less.
+
+**`systemd.tmpfiles.rules` only reasserts `baseDir`'s ownership/mode at
+boot and at `nixos-rebuild switch` activation**, not continuously --
+drift between those points (something else `chmod`/`chown`-ing it)
+would go undetected until the next one. Accepted rather than fixed with
+a periodic reassertion timer: causing that drift already requires a
+privileged local actor, at which point the host has a bigger problem
+than this one directory's permissions.

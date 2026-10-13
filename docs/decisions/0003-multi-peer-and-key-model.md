@@ -124,3 +124,13 @@ be the only way to get `nix-dynamic-builders-show-key` working for a
 pre-existing key at all (a path literal broke its `.pub`-sibling
 lookup); that specific gap is fixed now regardless of which form
 `sshKey` takes -- see `docs/decisions/0007`.
+
+**No rotation mechanism exists.** Replacing a key (self-generated or
+admin-supplied) is manual: delete the private key file to force
+regeneration (self-generated) or redeploy a new one (admin-supplied),
+then `show-key` + redeploy the peer's own config with the new public
+half, same as initial bootstrap. Accepted as a real gap rather than
+designed around -- per-host keys already confine a compromise's blast
+radius to one relationship (this ADR's own main point above), which
+covers the common case (suspected compromise of one specific peer)
+without needing scheduled rotation on top.

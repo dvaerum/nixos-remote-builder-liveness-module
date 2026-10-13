@@ -56,6 +56,10 @@ let
       };
     } "not a valid hostname/IP";
 
+    invalidPeerName = fails {
+      peers."bob/evil".maxJobs = 1;
+    } "unsafe to use in a systemd unit name";
+
     extraSshConfigNewline = fails {
       peers.bob = {
         maxJobs = 1;

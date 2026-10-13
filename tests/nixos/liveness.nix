@@ -406,20 +406,20 @@ in
     # (no privilege logic of its own -- it's just the file permission).
     alice.fail("su nobody -s /bin/sh -c 'nix-dynamic-builders-show-key selfgen'")
 
-    # --default against an admin-provided sshKey that's a STRING (alice's
-    # global sshKey = testSshKey) is NOT exercised here -- interpolating
-    # a path still copies the referenced path into the store as
-    # its own independent, content-hashed object (needed so the runtime
-    # SSH_KEY_PATH env var actually resolves to a real, materialized
-    # file -- confirmed the hard way: `toString` instead avoids that
-    # copy, but then nothing guarantees the path exists at all), so "the
-    # resolved store path + .pub" still does not find a real sibling
-    # file the way it would on a real filesystem. That's a genuine,
-    # currently-unsolved design gap for this shape of config, out of
-    # scope for this fix -- see tests/nixos/examples.nix's multiPeer
-    # scenario for --default tested against the *self-generated* case,
-    # where it works correctly (both halves are created together on disk
-    # by refresh.sh itself, no Nix store path arithmetic involved).
+    # --default against alice's global admin-provided sshKey (testSshKey,
+    # a string that still gets copied into the store as its own
+    # independent object via interpolation, so no natural .pub sibling
+    # exists next to it): works correctly regardless, since refresh.sh's
+    # own ssh-keygen -y fallback derives the public key straight from
+    # the private key whenever no sibling exists -- the same fallback
+    # that made this a non-issue once docs/decisions/0007 moved
+    # show-key off of ever touching the private key itself. (An earlier
+    # version of this comment called this an unsolved gap -- that
+    # predated 0007's fix and was never re-checked against it.)
+    alice.succeed(
+        "diff <(nix-dynamic-builders-show-key --default) "
+        "/run/nix-dynamic-builders/publickeys/_default.pub"
+    )
 
     # Bare invocation lists every known name.
     usage = alice.succeed("nix-dynamic-builders-show-key")
