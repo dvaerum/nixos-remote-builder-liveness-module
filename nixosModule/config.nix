@@ -137,14 +137,79 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
-    assertions = lib.mapAttrsToList (peerName: peerCfg: {
-      assertion = !(peerCfg.sshKey == false && cfg.sshKey == false);
-      message = ''
-        services.nixDynamicBuilders.peers.${peerName}.sshKey: no key available --
-        the shared default (services.nixDynamicBuilders.sshKey) is disabled
-        (false) and this peer didn't set its own.
-      '';
-    }) cfg.peers;
+    assertions = [
+      {
+        # A Nix PATH value (unlike a string) gets copied into the
+        # world-readable Nix store the moment it's interpolated anywhere
+        # (sshConfigFile's IdentityFile line, the unit's own
+        # SSH_KEY_PATH=) -- silently leaking the private key. See
+        # docs/decisions/0003's "known limitation".
+        assertion = !(builtins.isPath cfg.sshKey);
+        message = ''
+          services.nixDynamicBuilders.sshKey: got a Nix path literal
+          (e.g. ./my-key) -- this copies the private key into the
+          world-readable Nix store. Use an explicit string instead
+          (toString ./my-key, or a plain "/absolute/path" string).
+        '';
+      }
+    ]
+    ++ lib.concatLists (
+      lib.mapAttrsToList (
+        peerName: peerCfg:
+        [
+          {
+            assertion = !(peerCfg.sshKey == false && cfg.sshKey == false);
+            message = ''
+              services.nixDynamicBuilders.peers.${peerName}.sshKey: no key available --
+              the shared default (services.nixDynamicBuilders.sshKey) is disabled
+              (false) and this peer didn't set its own.
+            '';
+          }
+        ]
+        ++ lib.optional (peerCfg.sshKey != false) {
+          assertion = !(builtins.isPath peerCfg.sshKey);
+          message = ''
+            services.nixDynamicBuilders.peers.${peerName}.sshKey: got a Nix
+            path literal (e.g. ./my-key) -- this copies the private key into
+            the world-readable Nix store. Use an explicit string instead
+            (toString ./my-key, or a plain "/absolute/path" string).
+          '';
+        }
+        ++ [
+          {
+            # Rendered verbatim into a `Host ${hostname}` line in the
+            # shared ssh_config file (see docs/decisions/0010) -- an
+            # unescaped `*`/`?` lets this block's IdentityFile/
+            # extraSshConfig match OTHER peers' connections too, and a
+            # comma turns one hostname into multiple ssh_config patterns
+            # (`Host bob,*` matches literally everything). Allowlisting
+            # what a real hostname/IP can contain is simpler to get right
+            # than enumerating every dangerous ssh_config metacharacter.
+            assertion = builtins.match "[a-zA-Z0-9.:-]+" peerCfg.hostname != null;
+            message = ''
+              services.nixDynamicBuilders.peers.${peerName}.hostname:
+              "${peerCfg.hostname}" contains characters other than
+              letters, digits, '.', ':', and '-' -- not a valid
+              hostname/IP, and unsafe to render into an ssh_config
+              Host line as-is.
+            '';
+          }
+          {
+            # A single list entry containing an embedded newline injects
+            # an entirely new ssh_config line (e.g. a second `Host *`
+            # block) into the shared file -- see docs/decisions/0010.
+            assertion = lib.all (line: !lib.hasInfix "\n" line) peerCfg.extraSshConfig;
+            message = ''
+              services.nixDynamicBuilders.peers.${peerName}.extraSshConfig:
+              one entry contains an embedded newline, which would inject
+              an extra ssh_config line (applying to every peer whose
+              Host block comes after it in the shared file, not just
+              this one). Use one list entry per line instead.
+            '';
+          }
+        ]
+      ) cfg.peers
+    );
 
     environment.systemPackages = [ showKeyScript ];
 

@@ -24,6 +24,14 @@
         checks = {
           liveness = pkgs.testers.nixosTest (import ./tests/nixos/liveness.nix);
           examples = pkgs.testers.nixosTest (import ./tests/nixos/examples.nix { nixosModule = self; });
+          # Pure nix eval, no VM/container boot -- confirms the module's own
+          # `assertions` entries actually fire for the configs they're meant
+          # to catch (see the file's own header).
+          assertionsFireCorrectly = import ./tests/assertions.nix {
+            inherit pkgs;
+            inherit (pkgs) lib;
+            nixosModule = self;
+          };
           # Catches exactly the class of drift an audit pass found by hand
           # more than once: docs/options.md edited (or just left stale)
           # without regenerating it from nixosModule/options.nix.

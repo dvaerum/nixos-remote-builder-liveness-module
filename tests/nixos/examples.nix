@@ -30,7 +30,10 @@ in
     explicitKey = {
       imports = [
         nixosModule.nixosModules.default
-        (import examples.explicitKey { sshKeyPath = ../fixtures/test-ed25519; })
+        (import examples.explicitKey {
+          sshKeyPath = "${../fixtures/test-ed25519}";
+          publicKey = builtins.readFile ../fixtures/test-ed25519.pub;
+        })
       ];
     };
     customProbeTuning = {

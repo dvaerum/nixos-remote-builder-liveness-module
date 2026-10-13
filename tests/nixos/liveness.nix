@@ -13,7 +13,15 @@
 # runtime-generated key's public half at eval time to put in a peer's
 # authorized_keys.
 let
-  testSshKey = ../fixtures/test-ed25519;
+  # "${path}" interpolation, not a bare path literal: `sshKey` now has a
+  # hard assertion against path VALUES (they'd otherwise leak the
+  # private key into the Nix store silently) -- interpolating once here
+  # produces a plain string, satisfying that assertion, while still
+  # copying the file into the store as a real, tracked dependency (confirmed
+  # the hard way: `toString` instead of interpolation strips that
+  # tracking, and the resulting path was never actually materialized at
+  # all inside the test containers -- a real bug, not just unnecessary).
+  testSshKey = "${../fixtures/test-ed25519}";
   # Read from the real .pub fixture file, not a second hand-typed copy of
   # the same value -- an admin-provided sshKey is expected to have a real
   # .pub sibling on disk (same as any ssh-keygen output), which is exactly
@@ -31,7 +39,7 @@ let
   # the same authorized_keys file (a regression that silently only ever
   # rendered the first configured peer's line, say, would pass every
   # other assertion here). See "eve" below.
-  testSshKey2 = ../fixtures/test-ed25519-2;
+  testSshKey2 = "${../fixtures/test-ed25519-2}";
   testSshPublicKey2File = builtins.readFile ../fixtures/test-ed25519-2.pub;
   testSshPublicKey2 = builtins.substring 0 (
     builtins.stringLength testSshPublicKey2File - 1
@@ -398,17 +406,20 @@ in
     # (no privilege logic of its own -- it's just the file permission).
     alice.fail("su nobody -s /bin/sh -c 'nix-dynamic-builders-show-key selfgen'")
 
-    # --default against a *path-literal* admin-provided sshKey (alice's
-    # global sshKey = testSshKey) is NOT exercised here -- Nix copies a
-    # referenced path into the store as its own independent, content-
-    # hashed object, so "the resolved store path + .pub" does not find a
-    # real sibling file the way it would on a real filesystem. That's a
-    # genuine, currently-unsolved design gap for that one specific shape
-    # of config, out of scope for this fix -- see
-    # tests/nixos/examples.nix's multiPeer scenario for --default tested
-    # against the *self-generated* case, where it works correctly (both
-    # halves are created together on disk by refresh.sh itself, no Nix
-    # store path arithmetic involved).
+    # --default against an admin-provided sshKey that's a STRING (alice's
+    # global sshKey = testSshKey) is NOT exercised here -- interpolating
+    # a path still copies the referenced path into the store as
+    # its own independent, content-hashed object (needed so the runtime
+    # SSH_KEY_PATH env var actually resolves to a real, materialized
+    # file -- confirmed the hard way: `toString` instead avoids that
+    # copy, but then nothing guarantees the path exists at all), so "the
+    # resolved store path + .pub" still does not find a real sibling
+    # file the way it would on a real filesystem. That's a genuine,
+    # currently-unsolved design gap for this shape of config, out of
+    # scope for this fix -- see tests/nixos/examples.nix's multiPeer
+    # scenario for --default tested against the *self-generated* case,
+    # where it works correctly (both halves are created together on disk
+    # by refresh.sh itself, no Nix store path arithmetic involved).
 
     # Bare invocation lists every known name.
     usage = alice.succeed("nix-dynamic-builders-show-key")

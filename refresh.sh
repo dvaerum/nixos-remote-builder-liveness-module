@@ -154,6 +154,14 @@ if [ "$reachable" = "1" ]; then
   # check warns about (a variable meant to expand on the remote shell).
   raw="$(ssh "${ssh_opts[@]}" "${PEER_USER}@${PEER_HOSTNAME}" "$FEATURE_QUERY_COMMAND" 2>/dev/null || true)"
   live_system="$(printf '%s\n' "$raw" | sed -n '1p')"
+  # A real system string never contains whitespace -- if the peer's
+  # response does, treat it the same as "couldn't determine" (see the
+  # no-fallback comment above) rather than risk using a shifted-column
+  # fragment of it: this field is spliced verbatim into the machines-
+  # file line's own fixed-position fields below.
+  case "$live_system" in
+    *[[:space:]]*) live_system="" ;;
+  esac
   live_features_line="$(printf '%s\n' "$raw" | sed -n '2p')"
   if [ -n "$live_features_line" ]; then
     # nix config show prints a space-separated list; the machines-file
