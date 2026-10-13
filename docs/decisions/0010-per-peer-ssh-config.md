@@ -11,6 +11,12 @@ connection (`refresh.sh`'s `ssh_opts`'s `-F`, replacing the previous
 `-F /dev/null`) read this same file. Each peer's block also carries an
 explicit `IdentityFile` line pointing at that peer's own resolved key.
 
+A second, global option, `services.nixDynamicBuilders.extraSshConfig`,
+renders its lines verbatim into the same shared file, outside any
+peer's own `Host` block -- for something that isn't itself a configured
+peer, namely a jump host's own `Host` block and `IdentityFile` (see
+"Known gap" below).
+
 ## Why
 
 `NIX_SSHOPTS` is daemon-wide -- Nix has no per-machine ssh-options field
@@ -57,10 +63,13 @@ topology); the `Hostname`-redirect proof exercises the same underlying
 mechanism (the config file's `Host` block being consulted at all) that
 `ProxyJump` itself depends on.
 
-**Known gap, out of scope here:** if a jump host itself needs its own
-distinct identity (different from the target peer's key), there's no
-structured option for that -- `extraSshConfig` only lets you add lines
-inside that ONE peer's own `Host <hostname>` block, not a second,
-separate `Host <bastion>` block. An admin needing that can still get
-there via their own `programs.ssh.extraConfig` at the host level
-(outside this module), or an SSH agent holding the bastion's key.
+**Known gap, closed:** a jump host needing its own distinct identity
+(different from the target peer's key) originally had no structured
+option -- `peers.<name>.extraSshConfig` only adds lines inside that
+ONE peer's own `Host <hostname>` block, not a second, separate
+`Host <bastion>` block. `services.nixDynamicBuilders.extraSshConfig`
+(global, added after this ADR's initial version) fills exactly this
+gap: raw lines rendered into the same shared file but outside any
+peer's own block, so an admin can write the bastion's own
+`Host <bastion>` / `IdentityFile` pair directly -- see
+`examples/jump-host.nix` for the complete pattern.

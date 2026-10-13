@@ -306,6 +306,50 @@ signed integer
 
 
 
+## services\.nixDynamicBuilders\.extraSshConfig
+
+
+
+Extra ` ssh_config(5) ` lines rendered verbatim (not wrapped in any
+` Host ` block of their own) into the same shared config file
+` peers.<name>.extraSshConfig ` writes into (see
+` docs/decisions/0010 `)\. Global, not per-peer: for something that
+isn’t itself a configured peer – most commonly a jump host’s
+*own* ` Host ` block and ` IdentityFile `, needed because a
+` ProxyJump ` hop re-invokes ` ssh ` as a separate process that
+reads this same file for ITS OWN connection, not just the
+target peer’s\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "Host bastion.example.com"
+  "  IdentityFile /etc/nix-dynamic-builders/bastion_ed25519"
+]
+
+```
+
+*Declared by:*
+ - [/home/dennis/nixos-remote-builder-liveness-module/nixosModule/options\.nix](file:///home/dennis/nixos-remote-builder-liveness-module/nixosModule/options.nix)
+
+
+
 ## services\.nixDynamicBuilders\.knownHostsFile
 
 

@@ -7,6 +7,15 @@
     enable = true;
     sshKey = true;
 
+    # The bastion's OWN Host block and identity -- needed because
+    # ProxyJump re-invokes ssh as a separate process that reads this
+    # same shared file for the bastion's own connection, not secure-site's.
+    # Global, not per-peer: the bastion isn't itself a configured peer.
+    extraSshConfig = [
+      "Host bastion.example.com"
+      "  IdentityFile /etc/nix-dynamic-builders/bastion_ed25519"
+    ];
+
     peers.secure-site = {
       hostname = "10.0.1.50";
       maxJobs = 4;

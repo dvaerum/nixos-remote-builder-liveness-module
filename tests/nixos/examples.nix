@@ -236,5 +236,12 @@ in
     ).strip()
     jumpHost.succeed(f"grep -q 'Host 10.0.1.50' {ssh_config_path}")
     jumpHost.succeed(f"grep -q 'ProxyJump bastion.example.com' {ssh_config_path}")
+    # The GLOBAL extraSshConfig's own Host block (the bastion's own
+    # identity) lands in the same shared file too, independent of any
+    # one peer's block.
+    jumpHost.succeed(f"grep -q 'Host bastion.example.com' {ssh_config_path}")
+    jumpHost.succeed(
+        f"grep -q 'IdentityFile /etc/nix-dynamic-builders/bastion_ed25519' {ssh_config_path}"
+    )
   '';
 }

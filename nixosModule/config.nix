@@ -109,7 +109,10 @@ let
     );
 
   sshConfigFile = pkgs.writeText "nix-dynamic-builders-ssh-config" (
-    lib.concatStringsSep "\n\n" (lib.mapAttrsToList sshConfigBlock cfg.peers)
+    lib.concatStringsSep "\n\n" (
+      lib.mapAttrsToList sshConfigBlock cfg.peers
+      ++ lib.optional (cfg.extraSshConfig != [ ]) (lib.concatStringsSep "\n" cfg.extraSshConfig)
+    )
   );
 
   refreshScript = pkgs.writeShellApplication {
@@ -150,6 +153,17 @@ in
           (e.g. ./my-key) -- this copies the private key into the
           world-readable Nix store. Use an explicit string instead
           (toString ./my-key, or a plain "/absolute/path" string).
+        '';
+      }
+      {
+        # Same reasoning as the per-peer extraSshConfig check below --
+        # an embedded newline injects an extra, unintended line into the
+        # shared file.
+        assertion = lib.all (line: !lib.hasInfix "\n" line) cfg.extraSshConfig;
+        message = ''
+          services.nixDynamicBuilders.extraSshConfig: one entry contains
+          an embedded newline, which would inject an extra ssh_config
+          line into the shared file. Use one list entry per line instead.
         '';
       }
     ]

@@ -66,6 +66,10 @@ let
         extraSshConfig = [ "ProxyCommand x\nHost *\nProxyCommand evil" ];
       };
     } "embedded newline";
+
+    globalExtraSshConfigNewline = fails {
+      extraSshConfig = [ "Host bastion\nHost *\nProxyCommand evil" ];
+    } "embedded newline";
   };
 
   failed = lib.filterAttrs (_: ok: !ok) scenarios;

@@ -62,9 +62,29 @@ no patching or package overrides needed at all. Check `pkgs.nix.version`
 against the fix's merge date (2026-03-09) first, since that's a one-line
 confirmation of whether this is still blocked.
 
-If revisiting sooner is worth it anyway, two un-tried paths: (a) find
-and patch the actual per-component source derivation instead of the
-`pkgs.nix` wrapper, or (b) wire `pkgs.nixVersions.git` in as the test's
-own `nix.package` directly (no patching needed, since it already has
-the fix) -- not attempted end-to-end, so unknown if it has its own
-issues.
+**Update: path (b) was tried end to end (wiring `nix.package =
+pkgs.nixVersions.git` directly, no patching) -- still fails, with a
+different, more precise finding.** `nixVersions.git` (confirmed present
+at `2.36pre20261010_979a87c9`, source re-checked, fix still there) gets
+past whatever `makeStoreWritable`'s own remount logic does without
+throwing -- but a *separate*, later `chown()` in `LocalStore`'s own
+constructor (`src/libstore/local-store.cc`, the step that normalizes
+`/nix/store`'s ownership to the configured `build-users-group`,
+unrelated to the remount-to-writable step `#9705` fixes) still throws
+`EPERM` with the exact same message. This means nspawn's specific
+presentation of the read-only bind-mount doesn't make Nix's own
+`statvfs`-based "is this actually read-only" check agree with what the
+kernel actually enforces the way the original bug report's scenario
+did -- a narrower, different mismatch between this test backend and
+the fix's own assumptions, not something `nixVersions.git` alone
+resolves. Reverted again (same discipline as before: nothing
+half-working committed).
+
+The one remaining un-tried path: (a) find and patch the actual
+per-component source derivation `pkgs.nix` wraps (nixpkgs' own
+mid-transition to "per-component" packaging for `nix`, not yet
+identified which derivation actually holds the real source tree).
+Given two separate attempts have now hit two separate, non-overlapping
+walls, the next session attempting this should budget real
+investigation time for nixpkgs' own packaging structure specifically,
+not just another Nix-version swap.

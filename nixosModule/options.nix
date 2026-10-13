@@ -145,6 +145,28 @@ in
       description = "How often each peer is re-probed after the first tick (systemd time span). Global only -- see docs/decisions/0003.";
     };
 
+    extraSshConfig = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = lib.literalExpression ''
+        [
+          "Host bastion.example.com"
+          "  IdentityFile /etc/nix-dynamic-builders/bastion_ed25519"
+        ]
+      '';
+      description = ''
+        Extra `ssh_config(5)` lines rendered verbatim (not wrapped in any
+        `Host` block of their own) into the same shared config file
+        `peers.<name>.extraSshConfig` writes into (see
+        `docs/decisions/0010`). Global, not per-peer: for something that
+        isn't itself a configured peer -- most commonly a jump host's
+        *own* `Host` block and `IdentityFile`, needed because a
+        `ProxyJump` hop re-invokes `ssh` as a separate process that
+        reads this same file for ITS OWN connection, not just the
+        target peer's.
+      '';
+    };
+
     peers = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (
